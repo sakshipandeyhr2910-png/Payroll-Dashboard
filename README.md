@@ -19,16 +19,22 @@ Requires [Node.js](https://nodejs.org) (LTS, v18+).
 npm install
 ```
 
-Create a `.env` file (copy `.env.example`) with the PMS API credentials — required for Rayontara's live
-sync to work; every other entity works fine without it:
+Copy `.env.example` to `.env` and fill in credentials:
 
+```bash
+cp .env.example .env
 ```
-PMS_API_BASE=https://api.koenig-solutions.com
-PMS_USERNAME=...
-PMS_PASSWORD="..."
-PMS_ROLE="Get Employee Details (PMS)"
-PMS_API_KEY=...
-```
+
+- **`DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` — required.** This is the single shared login for the
+  app's own sign-in screen (see `vite-plugins/dashboardAuthPlugin.ts`); every `/api/*` route is gated
+  behind it, so the dashboard won't work at all without these set.
+- **Everything else is per-feature and optional.** Each block (`PMS_*`, `APPRAISAL_*`, `LOAN_*`,
+  `MEAL_*`, `RECOVERY_*`, `TDS_*`, `LEAVE_*`, `ARREAR_*`, plus the shared `KITES_DECRYPT_*` pair used to
+  decrypt the Appraisal/Arrear API responses) configures one live PMS integration on Rayontara's page.
+  Leave a block blank and that piece of data falls back to static/sample values — every other entity,
+  and Rayontara itself, still works without any of them.
+
+Ask a maintainer for the actual credential values — they're not committed anywhere in this repo.
 
 **Quote any value containing `#`, spaces, or parentheses** — dotenv-style parsers can otherwise treat
 `#` as a comment marker and silently truncate the value.
