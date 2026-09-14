@@ -1,0 +1,244 @@
+import type { Plugin, ViteDevServer, PreviewServer } from 'vite';
+import { RAYONTARA_EMP_CODES } from './rayontaraEmpCodes';
+import { decryptKoenigValue, verifyKoenigDecryption } from './koenigDecryption';
+
+export interface ArrearCredentials {
+  base: string;
+  username: string;
+  password: string;
+  role: string;
+  apiKey: string;
+  decryptPassword: string;
+  decryptSalt: string;
+}
+
+// New/old salary plus the two dates needed to decide which month (if any) an arrear falls due —
+// the actual per-month arithmetic (gap months, one-time-only display) is done client-side in
+// utils/arrearCalculation.ts, same architecture as Loan Advance (raw records fetched once,
+// month-specific amount derived on demand), since this API isn't month-scoped at all.
+export interface ArrearRecord {
+  code: number;
+  newSalary: number | null;
+  oldSalary: number | null;
+  appraisalDate: string | null;
+  createdDate: string | null;
+}
+
+interface TokenState {
+  accessToken: string;
+  deviceToken: string;
+}
+
+interface GetTokenResponse {
+  statuscode: number;
+  message: string;
+  content: { accessToken: string; deviceToken: string; Username: string; Role: string } | null;
+}
+
+// Confirmed live: Salary comes back AES-encrypted, not a plain number. Decryption is the shared
+// Koenig scheme (see vite-plugins/koenigDecryption.ts) — this same scheme also turned out to
+// apply to GetAppraisalData's Amount field (see rayontaraAppraisalApiPlugin.ts).
+function decryptSalary(cipherB64: string | null, creds: ArrearCredentials): number | null {
+  return decryptKoenigValue(cipherB64, creds.decryptPassword, creds.decryptSalt);
+}
+
+interface ArrearRaw {
+  AppraisalDate: string | null;
+  NextAppraisalDate: string | null;
+  Salary: string | null;
+  CreatedDate: string | null;
+}
+
+interface CommonResponse {
+  statuscode: number;
+  message: string;
+  content: string | ArrearRaw[] | null;
+}
+
+let cachedToken: TokenState | null = null;
+
+async function fetchToken(creds: ArrearCredentials): Promise<TokenState> {
+  const res = await fetch(`${creds.base}/api/Kites/Operator/GetToken`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userName: creds.username,
+      userPassword: creds.password,
+      userRole: creds.role,
+    }),
+  });
+  if (!res.ok) throw new Error(`GetToken HTTP ${res.status}`);
+  const data = (await res.json()) as GetTokenResponse;
+  if (data.statuscode !== 200 || !data.content?.accessToken || !data.content?.deviceToken) {
+    throw new Error(`GetToken failed: ${data.message || 'no token in response'}`);
+  }
+  return { accessToken: data.content.accessToken, deviceToken: data.content.deviceToken };
+}
+
+function parseContent(content: CommonResponse['content']): ArrearRaw[] {
+  if (Array.isArray(content)) return content;
+  if (typeof content === 'string' && content.trim().length > 0) {
+    const parsed = JSON.parse(content);
+    return Array.isArray(parsed) ? parsed : [];
+  }
+  return [];
+}
+
+// The API's own ordering isn't documented, so this sorts explicitly by AppraisalDate descending
+// rather than trusting array order — entry[0] is then always the current/latest appraisal,
+// entry[1] (if present) the one immediately before it.
+function sortByAppraisalDateDesc(raws: ArrearRaw[]): ArrearRaw[] {
+  return [...raws].sort((a, b) => {
+    const ta = a.AppraisalDate ? new Date(a.AppraisalDate).getTime() : -Infinity;
+    const tb = b.AppraisalDate ? new Date(b.AppraisalDate).getTime() : -Infinity;
+    return tb - ta;
+  });
+}
+
+async function fetchArrearForCode(
+  creds: ArrearCredentials,
+  token: TokenState,
+  code: number,
+): Promise<ArrearRecord | null> {
+  const url = `${creds.base}/api/Kites/Operator/common?apikey=${encodeURIComponent(creds.apiKey)}&accessToken=${encodeURIComponent(token.accessToken)}&deviceToken=${encodeURIComponent(token.deviceToken)}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ EmpId: String(code) }),
+  });
+  if (!res.ok) throw new Error(`common HTTP ${res.status}`);
+  const data = (await res.json()) as CommonResponse;
+  if (data.statuscode !== 200) throw new Error(`common failed (${data.statuscode}): ${data.message || 'unknown error'}`);
+  const sorted = sortByAppraisalDateDesc(parseContent(data.content));
+  const latest = sorted[0];
+  if (!latest) return null;
+  const previous = sorted[1];
+  return {
+    code,
+    newSalary: decryptSalary(latest.Salary, creds),
+    oldSalary: previous ? decryptSalary(previous.Salary, creds) : null,
+    appraisalDate: latest.AppraisalDate,
+    createdDate: latest.CreatedDate,
+  };
+}
+
+// Bounded concurrency, same reasoning as the Appraisal/Loan/TDS/Leave/Recovery plugins: avoid
+// opening hundreds of connections at once, and an isolated failed code shouldn't abort the batch.
+async function fetchArrearForCodes(
+  creds: ArrearCredentials,
+  token: TokenState,
+  codes: number[],
+): Promise<ArrearRecord[]> {
+  const results: ArrearRecord[] = [];
+  let nextIndex = 0;
+  let failures = 0;
+  const CONCURRENCY = 25;
+
+  async function worker() {
+    while (nextIndex < codes.length) {
+      const code = codes[nextIndex++];
+      try {
+        const record = await fetchArrearForCode(creds, token, code);
+        if (record) results.push(record);
+      } catch {
+        failures++;
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  // A high failure rate means the cached token likely expired mid-batch rather than a handful of
+  // bad codes — bail out so fetchArrearWithRetry refreshes the token, instead of silently caching
+  // an empty result that then looks like nobody has an arrear. Same reasoning as scanCodeUniverse
+  // in vite-plugins/rayontaraApiPlugin.ts.
+  if (codes.length > 0 && failures > codes.length * 0.2) {
+    throw new Error(`Arrear batch aborted: ${failures}/${codes.length} lookups failed`);
+  }
+  return results;
+}
+
+async function fetchArrearWithRetry(creds: ArrearCredentials, codes: number[]): Promise<ArrearRecord[]> {
+  if (!cachedToken) cachedToken = await fetchToken(creds);
+  try {
+    return await fetchArrearForCodes(creds, cachedToken, codes);
+  } catch {
+    cachedToken = await fetchToken(creds);
+    return await fetchArrearForCodes(creds, cachedToken, codes);
+  }
+}
+
+function registerMiddleware(server: ViteDevServer | PreviewServer, creds: ArrearCredentials) {
+  server.middlewares.use('/api/rayontara/arrear', (_req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    fetchArrearWithRetry(creds, RAYONTARA_EMP_CODES)
+      .then((records) => {
+        res.statusCode = 200;
+        res.end(JSON.stringify({ ok: true, records }));
+      })
+      .catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error('[rayontara-arrear-api]', err);
+        res.statusCode = 502;
+        const message = err instanceof Error ? err.message : 'Unknown error contacting GetLastTwoAppraisals API';
+        res.end(JSON.stringify({ ok: false, error: message }));
+      });
+  });
+}
+
+// Koenig's codes are only known client-side (recovered by the PMS code-registry scan — see
+// rayontaraApiPlugin.ts), so they're sent up in the request body, same pattern as every other
+// Koenig-specific endpoint in this project.
+function registerKoenigMiddleware(server: ViteDevServer | PreviewServer, creds: ArrearCredentials) {
+  server.middlewares.use('/api/koenig/arrear', (req, res) => {
+    if (req.method !== 'POST') {
+      res.statusCode = 405;
+      res.end(JSON.stringify({ ok: false, error: 'Method not allowed' }));
+      return;
+    }
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      res.setHeader('Content-Type', 'application/json');
+      let codes: number[];
+      try {
+        const parsed = JSON.parse(body || '{}');
+        codes = Array.isArray(parsed.codes)
+          ? parsed.codes.map(Number).filter((n: number) => Number.isFinite(n))
+          : [];
+      } catch {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ ok: false, error: 'Invalid JSON body' }));
+        return;
+      }
+      fetchArrearWithRetry(creds, codes)
+        .then((records) => {
+          res.statusCode = 200;
+          res.end(JSON.stringify({ ok: true, records }));
+        })
+        .catch((err: unknown) => {
+          // eslint-disable-next-line no-console
+          console.error('[koenig-arrear-api]', err);
+          res.statusCode = 502;
+          const message = err instanceof Error ? err.message : 'Unknown error contacting GetLastTwoAppraisals API';
+          res.end(JSON.stringify({ ok: false, error: message }));
+        });
+    });
+  });
+}
+
+export function rayontaraArrearApiPlugin(creds: ArrearCredentials): Plugin {
+  verifyKoenigDecryption(creds.decryptPassword, creds.decryptSalt);
+  return {
+    name: 'rayontara-arrear-api',
+    configureServer(server) {
+      registerMiddleware(server, creds);
+      registerKoenigMiddleware(server, creds);
+    },
+    configurePreviewServer(server) {
+      registerMiddleware(server, creds);
+      registerKoenigMiddleware(server, creds);
+    },
+  };
+}

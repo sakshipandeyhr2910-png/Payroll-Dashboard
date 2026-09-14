@@ -1,0 +1,236 @@
+:root{
+  --purple:#5C60EF;
+  --purple-deep:#4347c9;
+  --purple-light:#7478f2;
+  --blue-heading:#008DD1;
+  --blue-btn:#337AB7;
+  --blue-btn-dark:#2c6a9e;
+  --green:#5CB85C;
+  --green-dark:#449d44;
+  --bg-lavender:#EFF1FF;
+  --white:#ffffff;
+  --border:#d8dae8;
+  --text-dark:#2b2d42;
+  --text-muted:#6b6f8a;
+  --gold:#FFC107;
+  --good:#0ca30c;
+  --warning:#c98500;
+  --s-blue:#2a78d6;
+  --s-orange:#eb6834;
+  --s-aqua:#1baf7a;
+  --s-yellow:#eda100;
+  --s-violet:#4a3aa7;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;background:var(--bg-lavender);color:var(--text-dark);zoom:0.82;}
+.app{display:flex;min-height:100vh;}
+
+/* ---------------- LOGIN ---------------- */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,var(--purple) 0%, var(--purple-deep) 100%);}
+.login-card{width:340px;background:var(--white);border-radius:12px;padding:32px 28px;box-shadow:0 20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;}
+.login-title{font-size:22px;font-weight:800;letter-spacing:2px;color:var(--purple-deep);}
+.login-subtitle{font-size:13px;color:var(--text-muted);margin-bottom:22px;}
+.login-label{font-size:12px;font-weight:600;color:var(--text-muted);margin:10px 0 4px;}
+.login-input{padding:9px 11px;border:1px solid var(--border);border-radius:6px;font-size:14px;outline:none;}
+.login-input:focus{border-color:var(--purple);}
+.login-error{color:#c0392b;font-size:12px;margin-top:10px;}
+.login-btn{margin-top:20px;padding:10px;border:none;border-radius:6px;background:var(--purple);color:var(--white);font-weight:700;font-size:14px;cursor:pointer;}
+.login-btn:hover:not(:disabled){background:var(--purple-deep);}
+.login-btn:disabled{opacity:.6;cursor:not-allowed;}
+.logout-btn{background:none;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:12px;color:var(--text-muted);cursor:pointer;margin-left:10px;}
+.logout-btn:hover{background:var(--bg-lavender);}
+
+/* ---------------- SIDEBAR ---------------- */
+.sidebar{
+  width:250px;background:linear-gradient(180deg,var(--purple) 0%, var(--purple-deep) 100%);
+  color:#fff;display:flex;flex-direction:column;position:fixed;top:0;left:0;
+  /* body has zoom:0.82 — a plain 100vh box renders at 100vh*0.82 tall, leaving a gap
+     at the bottom of the real window. Scale the height up so the visually-rendered
+     box is a true 100vh regardless of zoom. */
+  height:calc(100vh / 0.82);overflow:hidden;z-index:30;
+}
+.brand{flex:none;padding:20px 20px 14px;border-bottom:1px solid rgba(255,255,255,.18);}
+.brand-title{font-size:20px;font-weight:800;letter-spacing:1px;}
+.brand-sub{font-size:10.5px;letter-spacing:2.5px;opacity:.8;margin-top:4px;text-transform:uppercase;}
+.sidebar-scroll{
+  flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent;
+}
+.sidebar-scroll::-webkit-scrollbar{width:7px;}
+.sidebar-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.35);border-radius:4px;}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.55);}
+.nav-section-label{padding:14px 22px 6px;font-size:10px;letter-spacing:1.5px;color:rgba(255,255,255,.55);text-transform:uppercase;font-weight:700;position:sticky;top:0;background:linear-gradient(180deg,var(--purple) 0%, var(--purple) 60%, transparent);z-index:1;}
+.navlist{list-style:none;margin:4px 0 10px;padding:0 10px;}
+.navlist li{margin:1px 0;}
+.navlink{
+  display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;color:#eef;
+  text-decoration:none;font-size:13px;cursor:pointer;transition:background .15s ease;
+}
+.navlink .ic{width:16px;text-align:center;color:var(--gold);font-size:13px;flex:none;}
+.navlink span:not(.ic){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.navlink:hover{background:rgba(255,255,255,.12);}
+.navlink.active{background:#fff;color:var(--purple);font-weight:700;}
+.navlink.active .ic{color:var(--purple);}
+.sidebar-foot{flex:none;padding:12px 20px;font-size:10px;line-height:1.4;opacity:.65;border-top:1px solid rgba(255,255,255,.15);box-shadow:0 -6px 10px -6px rgba(0,0,0,.25);}
+
+/* ---------------- MAIN ---------------- */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;margin-left:250px;}
+.topbar{
+  background:#fff;border-bottom:1px solid var(--border);padding:14px 28px;
+  display:flex;align-items:center;gap:20px;position:sticky;top:0;z-index:20;
+}
+.search-box{flex:1;max-width:420px;position:relative;}
+.search-box input{
+  width:100%;padding:10px 14px 10px 34px;border-radius:8px;border:1px solid var(--border);
+  background:#f6f7fc;font-size:13px;outline:none;
+}
+.search-box input:focus{border-color:var(--purple);background:#fff;}
+.search-box::before{content:"⌕";position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:15px;}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:20px;}
+.user-chip{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--text-dark);font-size:13px;}
+.user-avatar{width:30px;height:30px;border-radius:50%;background:var(--purple);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;}
+
+.content{padding:26px 32px 60px;max-width:1300px;width:100%;margin:0 auto;}
+.page{display:none;animation:fade .25s ease;}
+.page.active{display:block;}
+@keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:wrap;}
+.page-title{color:var(--blue-heading);font-size:25px;font-weight:800;margin:0;}
+.page-desc{color:var(--text-muted);font-size:13.5px;margin-top:6px;max-width:640px;line-height:1.5;}
+.pillbar{display:flex;gap:10px;flex-wrap:wrap;}
+.pill-btn{
+  background:var(--blue-btn);color:#fff;border:none;padding:9px 16px;border-radius:8px;
+  font-size:12.5px;font-weight:700;cursor:pointer;box-shadow:0 2px 4px rgba(51,122,183,.3);
+}
+.pill-btn:hover{background:var(--blue-btn-dark);}
+.pill-btn.green{background:var(--green);box-shadow:0 2px 4px rgba(92,184,92,.35);}
+.pill-btn.green:hover{background:var(--green-dark);}
+.hr-divider{height:2px;background:linear-gradient(90deg,var(--border),transparent);border:none;margin:0 0 24px;}
+
+/* stat hero cards */
+.stat-hero-row{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-bottom:28px;}
+.stat-hero{background:#fff;border:1px solid var(--border);border-radius:14px;padding:24px 26px;border-top:5px solid var(--purple);}
+.stat-hero .num{font-size:38px;font-weight:800;color:var(--purple);line-height:1;}
+.stat-hero .lbl{font-size:12.5px;color:var(--text-muted);margin-top:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+@media(max-width:640px){.stat-hero-row{grid-template-columns:1fr;}}
+
+/* KPI cards (used on entity pages) */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:26px;}
+.kpi-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 18px;border-top:4px solid var(--purple);}
+.kpi-num{font-size:24px;font-weight:800;color:var(--purple);}
+.kpi-label{font-size:11.5px;color:var(--text-muted);margin-top:2px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
+
+/* entity picker cards on overview */
+.section-label{font-size:14px;font-weight:800;color:var(--text-dark);margin:6px 0 14px;}
+.entity-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;}
+.entity-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 18px;cursor:pointer;transition:transform .15s ease, box-shadow .15s ease;}
+.entity-card:hover{transform:translateY(-3px);box-shadow:0 10px 22px rgba(92,96,239,.18);border-color:var(--purple-light);}
+.entity-card .ename{font-weight:800;font-size:14.5px;color:var(--text-dark);}
+.entity-card .emeta{font-size:11.5px;color:var(--text-muted);margin-top:6px;display:flex;justify-content:space-between;}
+.entity-card .ecur{background:#eef0fa;color:var(--purple-deep);font-weight:800;padding:2px 8px;border-radius:6px;font-size:10.5px;}
+
+.card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px;}
+.card h3{margin:0 0 4px;font-size:15px;color:var(--text-dark);}
+.card .sub{font-size:11.5px;color:var(--text-muted);margin-bottom:14px;}
+
+.note-card{background:#f9faff;border:1px solid var(--border);border-left:4px solid var(--blue-heading);border-radius:10px;padding:16px 18px;font-size:12.8px;line-height:1.6;color:var(--text-dark);}
+.note-card b{color:var(--purple-deep);}
+
+.footer-note{text-align:center;color:var(--text-muted);font-size:11px;margin-top:30px;padding-top:16px;border-top:1px solid var(--border);}
+
+.src-badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:10.5px;font-weight:800;margin-left:10px;vertical-align:middle;}
+.src-badge.live{background:#e4f7ee;color:#0f7a45;}
+.src-badge.sample{background:#eef0fa;color:var(--purple-deep);}
+
+.badge-cat{padding:2px 8px;border-radius:6px;font-size:10.5px;font-weight:800;white-space:nowrap;}
+.badge-white{background:#eef0f7;color:var(--text-muted);}
+.badge-blue{background:#e3f2fb;color:var(--blue-heading);}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+th{text-align:left;padding:9px 10px;background:#f5f6fd;color:var(--text-muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--border);position:sticky;top:0;}
+td{padding:9px 10px;border-bottom:1px solid #eef;vertical-align:top;}
+tr.rowbtn{cursor:pointer;}
+tr.rowbtn:hover{background:#f8f9ff;}
+.table-scroll{max-height:480px;overflow:auto;border:1px solid var(--border);border-radius:10px;}
+.detail-row td{background:#f9faff;}
+.detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;font-size:12px;padding:8px 4px;}
+.detail-grid div b{display:block;color:var(--text-muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;font-weight:700;}
+.remark-tag{display:inline-block;background:#fdf1da;color:var(--warning);padding:3px 9px;border-radius:6px;font-size:10.5px;font-weight:700;}
+.table-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;}
+
+/* month calendar control */
+.month-control{display:flex;align-items:center;gap:6px;}
+.month-arrow{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--purple-deep);font-size:16px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;}
+.month-arrow:hover{background:#f5f6fd;}
+.month-input{border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;font-family:inherit;color:var(--text-dark);background:#fff;}
+.period-note{background:#fdf6e3;border:1px solid #f3e2ad;color:#8a6d1d;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px;display:none;line-height:1.5;}
+.period-note.show{display:block;}
+
+/* category filter chips */
+.chip-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.chip{padding:7px 14px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:12px;font-weight:700;cursor:pointer;color:var(--text-muted);}
+.chip:hover{background:#f5f6fd;}
+.chip.on{background:var(--purple);color:#fff;border-color:var(--purple);}
+
+/* fully bifurcated payroll register (matches the uploaded Salary Sheet's columns) */
+/* Emp Code + Employee Name are pinned via CSS position:sticky on the SAME table/same rows as
+   everything else — not a second <table> kept in sync over JS scroll events. Two independent
+   tables can never be guaranteed to line up row-for-row (each one's scrollHeight is computed
+   independently and drifts by sub-pixel rounding across hundreds of rows), and any JS-event-based
+   sync is at best a frame behind the browser's own native scroll paint, which shows up as visible
+   lag/misalignment during active scrolling even when the two eventually settle in the same place.
+   A single table has exactly one native scroll to paint — the sticky columns are physically part
+   of the same rows as every other cell, so there is nothing left that could go out of alignment. */
+.payroll-outer{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.table-scroll{max-height:480px;overflow:auto;}
+table.payroll-table{width:max-content;min-width:100%;font-size:11.5px;border-collapse:collapse;}
+table.payroll-table th, table.payroll-table td{white-space:nowrap;padding:8px 10px;}
+table.payroll-table th{position:sticky;top:0;z-index:2;}
+table.payroll-table td.num{text-align:right;font-variant-numeric:tabular-nums;}
+table.payroll-table td.net-cell{font-weight:800;color:var(--purple-deep);}
+
+/* The two pinned columns need their own opaque background (sticky content otherwise shows
+   whatever scrolls underneath it) and an explicit width so the sticky `left` offset below lines
+   up exactly with where the column actually renders. col-sticky-2's box-shadow is what visually
+   reads as "frozen pane edge" — it only appears at the boundary with the scrolling columns. */
+table.payroll-table .col-sticky-1{position:sticky;left:0;z-index:1;background:#fff;width:76px;min-width:76px;max-width:76px;overflow:hidden;text-overflow:ellipsis;}
+table.payroll-table .col-sticky-2{position:sticky;left:76px;z-index:1;background:#fff;width:168px;min-width:168px;max-width:168px;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 4px rgba(11,11,11,.08);}
+table.payroll-table th.col-sticky-1, table.payroll-table th.col-sticky-2{z-index:3;background:#f5f6fd;}
+
+/* Blue Collar rows — applied to every td, including the two sticky ones (which otherwise keep
+   their own opaque white background above and would break the highlight where they overlap it). */
+table.payroll-table tr.row-blue-collar td{background:#a9dcf5;}
+table.payroll-table tr.row-blue-collar td.col-sticky-1, table.payroll-table tr.row-blue-collar td.col-sticky-2{background:#a9dcf5;}
+
+/* Excel-style per-column filters (Koenig/Rayontara only) — the dropdown itself is portaled to
+   document.body (see PayrollTable.tsx) so it's never clipped by the frozen/scroll panes' own
+   overflow:auto, and positioned via a fixed-coordinate style computed from the clicked icon's
+   bounding rect rather than living in normal document flow. */
+.th-with-filter{display:inline-flex;align-items:center;gap:5px;}
+.col-filter-btn{border:none;background:transparent;color:var(--text-muted);cursor:pointer;font-size:10px;line-height:1;padding:2px 3px;border-radius:4px;flex:none;}
+.col-filter-btn:hover{background:rgba(92,96,239,.12);color:var(--purple-deep);}
+.col-filter-btn.active{color:#fff;background:var(--purple);}
+/* Whole header cell, not just the tiny dropdown icon, so an active filter is obvious even when
+   scanning across many columns rather than hunting for a small badge. Beats the sticky-column
+   header background (table.payroll-table th.col-sticky-1/2) on specificity via the extra class,
+   so Emp Code/Employee Name still show it correctly while pinned. */
+table.payroll-table th.th-filter-active{background:#e3e4fb;color:var(--purple-deep);box-shadow:inset 0 -2px 0 var(--purple);}
+.col-filter-scrim{position:fixed;inset:0;z-index:1000;background:transparent;}
+.col-filter-dropdown{position:fixed;z-index:1001;width:220px;max-height:320px;display:flex;flex-direction:column;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 28px rgba(20,20,50,.18);font-size:12px;overflow:hidden;}
+.col-filter-search{border:none;border-bottom:1px solid var(--border);padding:9px 12px;font-size:12px;font-family:inherit;outline:none;}
+.col-filter-actions{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);}
+.col-filter-actions button{flex:1;border:1px solid var(--border);background:#fafaff;border-radius:6px;padding:5px 6px;font-size:11px;font-weight:700;color:var(--purple-deep);cursor:pointer;}
+.col-filter-actions button:hover{background:#eef0fa;}
+.col-filter-list{overflow-y:auto;padding:4px 0;flex:1;}
+.col-filter-item{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;}
+.col-filter-item:hover{background:#f5f6fd;}
+.col-filter-item input{flex:none;}
+.col-filter-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.col-filter-empty{padding:14px 12px;color:var(--text-muted);text-align:center;}
+.col-filter-footer{display:flex;gap:8px;padding:8px 10px;border-top:1px solid var(--border);}
+.col-filter-footer button{flex:1;border-radius:6px;padding:6px;font-size:12px;font-weight:800;cursor:pointer;}
+.col-filter-cancel{border:1px solid var(--border);background:#fff;color:var(--text-muted);}
+.col-filter-cancel:hover{background:#f5f6fd;}
+.col-filter-ok{border:none;background:var(--purple);color:#fff;}
+.col-filter-ok:hover{background:var(--purple-deep);}
