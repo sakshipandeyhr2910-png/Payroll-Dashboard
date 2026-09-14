@@ -1,0 +1,39 @@
+name: Warm Koenig/Global employee code cache
+
+# Runs scripts/warmCodeUniverse.ts, which performs the ~10,000-call PMS employee-code recovery
+# scan that api/koenig/employees.ts and api/global/employees.ts depend on (see that script's own
+# header comment for why this can't run inside a Vercel serverless function). Must be run at least
+# once — via the "Run workflow" button below — before the Koenig/Global entity pages work in
+# production; see README.md's "Deploying to Vercel" section.
+
+on:
+  schedule:
+    # Daily at 03:00 UTC. Adjust if the company's employee roster changes often enough that a
+    # day-old cache becomes a real problem (a code that only became queryable *after* the day's
+    # scan stays unmatched until the next run, same limitation the original in-memory cache had
+    # between dev-server restarts).
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  warm-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Run warm-code-universe script
+        run: npm run warm-code-universe
+        env:
+          PMS_API_BASE: ${{ secrets.PMS_API_BASE }}
+          PMS_USERNAME: ${{ secrets.PMS_USERNAME }}
+          PMS_PASSWORD: ${{ secrets.PMS_PASSWORD }}
+          PMS_ROLE: ${{ secrets.PMS_ROLE }}
+          PMS_API_KEY: ${{ secrets.PMS_API_KEY }}
+          KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
+          KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}

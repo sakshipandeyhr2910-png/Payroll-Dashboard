@@ -6,18 +6,25 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck:api": "tsc --noEmit -p tsconfig.api.json",
+    "warm-code-universe": "tsx scripts/warmCodeUniverse.ts"
   },
   "dependencies": {
+    "@vercel/kv": "^3.0.0",
+    "jsonwebtoken": "^9.0.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.2.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@vercel/node": "^13.0.0",
     "@vitejs/plugin-react": "^4.3.3",
+    "tsx": "^4.23.13",
     "typescript": "^5.6.3",
     "vite": "^5.4.10"
   }

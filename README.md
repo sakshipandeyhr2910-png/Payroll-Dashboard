@@ -129,3 +129,72 @@ on top of the uploaded Salary Sheet:
 This mirrors the original static prototype's behavior exactly, including its known limitations (e.g.
 payroll rows are not click-expandable despite the register's helper text — that affordance was never
 wired up in the source prototype either).
+
+## Deploying to Vercel
+
+In production the backend runs as Vercel serverless functions under `api/` instead of the Vite dev
+middleware in `vite-plugins/` (that directory and `vite.config.ts` are untouched and still power
+`npm run dev` locally — Vercel's build only ever runs `npm run build`, i.e. `tsc -b && vite build`,
+which never touches `api/`). See `api/_lib/` for the shared auth/KV/token-cache helpers and
+`vercel.json` for the build/rewrite config.
+
+### 1. Import the repo
+
+In the [Vercel dashboard](https://vercel.com/new), import this repository. Vercel auto-detects the
+Vite framework preset; `vercel.json` at the repo root pins `buildCommand`, `outputDirectory`, and a
+rewrite so client-side routing (`/entity/koenig`, etc.) still serves `index.html` for any path that
+isn't under `/api/`.
+
+### 2. Connect a KV/Redis store
+
+Open the project's **Storage** tab → **Create Database** (or **Marketplace** → a Redis provider) →
+connect a Redis-compatible store to the project. This automatically populates the
+`KV_REST_API_URL` and `KV_REST_API_TOKEN` environment variables that `api/_lib/kv.ts`
+(`@vercel/kv`) reads — no manual env var entry needed for those two.
+
+### 3. Set environment variables
+
+In **Settings → Environment Variables**, set everything the old `.env` used to hold, plus one new
+one:
+
+- **`JWT_SECRET` — new, required.** A long random string used to sign session JWTs (see
+  `api/_lib/auth.ts`). Generate one with e.g. `openssl rand -hex 32`. Treat it like a password —
+  anyone with it can mint a valid session token.
+- **`DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` — required.** The shared dashboard login, same as
+  local dev.
+- **Per-feature blocks (all optional — a blank block just falls back to static/sample data for
+  that feature, same as local dev):**
+  - `PMS_API_BASE`, `PMS_USERNAME`, `PMS_PASSWORD`, `PMS_ROLE`, `PMS_API_KEY`
+  - `APPRAISAL_API_BASE`, `APPRAISAL_USERNAME`, `APPRAISAL_PASSWORD`, `APPRAISAL_ROLE`, `APPRAISAL_API_KEY`
+  - `LOAN_API_BASE`, `LOAN_USERNAME`, `LOAN_PASSWORD`, `LOAN_ROLE`, `LOAN_API_KEY`
+  - `MEAL_API_BASE`, `MEAL_USERNAME`, `MEAL_PASSWORD`, `MEAL_ROLE`, `MEAL_API_KEY`
+  - `RECOVERY_API_BASE`, `RECOVERY_USERNAME`, `RECOVERY_PASSWORD`, `RECOVERY_ROLE`, `RECOVERY_API_KEY`
+  - `TDS_API_BASE`, `TDS_USERNAME`, `TDS_PASSWORD`, `TDS_ROLE`, `TDS_API_KEY`
+  - `LEAVE_API_BASE`, `LEAVE_USERNAME`, `LEAVE_PASSWORD`, `LEAVE_ROLE`, `LEAVE_API_KEY`
+  - `ARREAR_API_BASE`, `ARREAR_USERNAME`, `ARREAR_PASSWORD`, `ARREAR_ROLE`, `ARREAR_API_KEY`
+  - `KITES_DECRYPT_PASSWORD`, `KITES_DECRYPT_SALT` — shared by the Appraisal and Arrear APIs to
+    decrypt their encrypted Amount/Salary fields (see `api/_lib/koenigDecryption.ts`)
+
+Ask a maintainer for the actual credential values — they're not committed anywhere in this repo.
+
+### 4. Set up the `warm-koenig-cache` GitHub Action
+
+The Koenig and Global entity pages resolve each employee's PMS Emp Code via a ~10,000-call scan
+across the company's known code ranges (see `api/_lib/codeUniverseMatch.ts`). That scan is far too
+slow to run inside a single serverless invocation (Hobby plan: 10-second max execution time), so it
+runs out-of-band instead, via `scripts/warmCodeUniverse.ts` and the scheduled workflow at
+`.github/workflows/warm-koenig-cache.yml`, which writes its result to the same KV store connected
+in step 2.
+
+1. In the GitHub repo's **Settings → Secrets and variables → Actions**, add these repo secrets:
+   `PMS_API_BASE`, `PMS_USERNAME`, `PMS_PASSWORD`, `PMS_ROLE`, `PMS_API_KEY`, `KV_REST_API_URL`,
+   `KV_REST_API_TOKEN` (the last two are the same values from step 2 — copy them from the Vercel
+   project's Storage tab or its Environment Variables page).
+2. **The workflow must be run at least once manually before the Koenig/Global pages will work in
+   production** — go to the **Actions** tab → **Warm Koenig/Global employee code cache** →
+   **Run workflow**. Until it's run once, `api/koenig/employees.ts` and `api/global/employees.ts`
+   respond with a `503` (`{ok:false, error:'Employee code cache not yet warmed — run the
+   warm-koenig-cache workflow'}`) rather than attempting the scan inline.
+3. After that first manual run, it also runs automatically on the schedule in the workflow file
+   (daily at 03:00 UTC by default) to pick up newly-joined employees — adjust the cron if the
+   roster changes fast enough that a day-old cache becomes a problem.
