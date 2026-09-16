@@ -42,6 +42,9 @@ export interface PmsEmployee {
   // Confirmed live: unlike the Is_* flags (all strings), this comes through as a raw JSON number.
   working_days: string | number | null;
   Is_blue_collared_job: string | null;
+  // Overseas (Is_oversease=true) entity-routing fields — see fetchAllOverseasEmployees below.
+  golabl_type: string | null;
+  payroll_processing_location: string | null;
 }
 
 export type PmsEmployeeRaw = Omit<PmsEmployee, 'code'>;
@@ -200,4 +203,14 @@ export async function fetchAllKoenigEmployees(creds: PmsCredentials, token: Toke
 export async function fetchAllGlobalEmployees(creds: PmsCredentials, token: TokenState): Promise<PmsEmployeeRaw[]> {
   const all = await fetchAllEmployeesBulk(creds, token);
   return all.filter((e) => toBool(e.Is_global));
+}
+
+// Overseas = Is_oversease=true, independent of Is_global (confirmed live: these are two disjoint
+// populations — nobody is flagged both). This is a small, separate group of employees whose
+// Payroll Processing Location determines which country-specific dashboard entity (Dubai, USA, UK,
+// New Zealand, Australia, Malaysia, Saudi, Canada) they belong under — see
+// src/utils/overseasEntityMapping.ts for the routing rules.
+export async function fetchAllOverseasEmployees(creds: PmsCredentials, token: TokenState): Promise<PmsEmployeeRaw[]> {
+  const all = await fetchAllEmployeesBulk(creds, token);
+  return all.filter((e) => toBool(e.Is_oversease) && !toBool(e.Is_global));
 }

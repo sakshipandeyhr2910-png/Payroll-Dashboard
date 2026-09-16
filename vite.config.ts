@@ -10,6 +10,7 @@ import { rayontaraRecoveryApiPlugin } from './vite-plugins/rayontaraRecoveryApiP
 import { rayontaraTdsApiPlugin } from './vite-plugins/rayontaraTdsApiPlugin';
 import { rayontaraLeaveApiPlugin } from './vite-plugins/rayontaraLeaveApiPlugin';
 import { rayontaraArrearApiPlugin } from './vite-plugins/rayontaraArrearApiPlugin';
+import { rayontaraWfhApiPlugin } from './vite-plugins/rayontaraWfhApiPlugin';
 
 export default defineConfig(({ mode }) => {
   // Third arg '' loads ALL vars from .env (not just VITE_-prefixed ones) into this Node-side
@@ -86,6 +87,13 @@ export default defineConfig(({ mode }) => {
         apiKey: env.ARREAR_API_KEY,
         decryptPassword: env.KITES_DECRYPT_PASSWORD,
         decryptSalt: env.KITES_DECRYPT_SALT,
+      }),
+      rayontaraWfhApiPlugin({
+        base: env.WFH_API_BASE,
+        username: env.WFH_USERNAME,
+        password: env.WFH_PASSWORD,
+        role: env.WFH_ROLE,
+        apiKey: env.WFH_API_KEY,
       }),
     ],
     server: {

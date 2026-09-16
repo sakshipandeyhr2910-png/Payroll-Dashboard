@@ -106,6 +106,35 @@ on top of the uploaded Salary Sheet:
 - **Failure handling**: if the PMS API is unreachable or returns an error, the register falls back to
   the last-known Salary Sheet data and shows a warning note — it never breaks the page.
 
+## Overseas employee routing
+
+Dubai, USA, UK, New Zealand, Australia, Malaysia, Saudi and Canada all pull from one shared PMS
+fetch — every employee flagged `Is_oversease=true` (a separate, non-overlapping population from
+Global-DMCC's `Is_global=true` employees) — via `/api/overseas/employees`. Each entity page filters
+that same list down to its own country using `src/utils/overseasEntityMapping.ts`:
+
+- **Rule 1 — FZLLC tag wins outright**: an employee whose `golabl_type` field is `"FZLLC"` is
+  always routed to Dubai, regardless of their Payroll Processing Location. As of writing, no live
+  employee actually has this value (`golabl_type` is `null` or `"false"` for all 575 employees
+  checked) — the rule is implemented and ready, it just hasn't been triggered by real data yet.
+- **Rule 2 — everyone else, by city**: the city in `payroll_processing_location` is looked up
+  against a per-country city table (e.g. Toronto/Vancouver → Canada, London/Manchester → UK) to
+  find the matching entity. An employee with a blank Payroll Processing Location — even one whose
+  `city_name` elsewhere in the record suggests Dubai — is deliberately left out of every country
+  tab rather than guessed at, per explicit decision; only a filled-in Payroll Processing Location
+  routes them anywhere.
+- Employee-master fields (name, designation, DOJ, bank details, UAN, location) and Pay Scale are
+  live for these 8 entities — Pay Scale reuses the same generic Appraisal API client
+  (`fetchKoenigAppraisal`) already used by Koenig/Global, and Salary is derived from it via
+  EntityPage.tsx's generic (not entity-scoped) Pay-Scale-driven computation. PF and ESI are
+  deliberately NOT derived from that same Appraisal record for these entities, even though it
+  carries an EPF figure — those are India-specific deductions that don't apply overseas (see
+  `isAppraisalPfEntity` in EntityPage.tsx). There's no Loan/Meal/Recovery/TDS/Leave/WFH integration
+  wired up for these entities, so those columns show "—".
+- Emp Code recovery reuses the exact same company-wide code-registry scan as Koenig/Global (see
+  above) — on Vercel this reads the `codeUniverse:overseas` KV key, populated by the same
+  `warm-koenig-cache` GitHub Action.
+
 ## Feature parity with the original prototype
 
 - Sidebar navigation between **Overview** and 11 entities (Koenig, Rayontara, Dubai, Global, USA, UK,

@@ -56,9 +56,17 @@ function toBool(v: string | null | undefined): boolean {
 // fabricated, when no unambiguous match exists. Only rows that got a code can be looked up in the
 // Appraisal API (Pay Scale, PF, NPS) — those without one keep every financial column as NaN
 // (renders as "—"). Loan/Meal/Recovery still aren't linked for Koenig at all yet.
+//
+// Currency: the Appraisal API returns its own `currency` per employee alongside Pay Scale, and
+// it's frequently NOT the entity's nominal payout currency — confirmed live, Global-DMCC's 35
+// employees are actually 32 USD / 2 AED / 1 EUR (never AED-only), and even Koenig (nominally
+// India-only) has 2 USD entries among its 491. A row uses its own matched Appraisal record's
+// currency; `defaultCurrency` only covers rows with no Appraisal match (no code recovered, or the
+// API simply didn't return one) or a null currency on the record itself.
 export function buildKoenigLiveRows(
   employees: KoenigEmployeeRaw[],
   appraisalByCode: Map<number, AppraisalRecord> = new Map(),
+  defaultCurrency = 'INR',
 ): PayrollRow[] {
   return employees.map((e) => {
     const hasResigned = Boolean(e.date_of_resigantion);
@@ -96,7 +104,7 @@ export function buildKoenigLiveRows(
       wfh: NaN,
       localtax: NaN,
       net: NaN,
-      currency: 'INR',
+      currency: appraisal?.currency ?? defaultCurrency,
       remarks: hasResigned ? `Date of Resignation: ${resignedOn}` : '',
       salaryHold: hasResigned ? 'Yes' : 'No',
       uan: e.UAN || '',

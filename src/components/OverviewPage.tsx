@@ -3,17 +3,23 @@ import { ENTITIES } from '../data/entities';
 import { entityCurrencies } from '../utils/currencies';
 import { fetchKoenigLiveEmployees } from '../utils/koenigLiveApi';
 import { fetchRayontaraLiveEmployees } from '../utils/rayontaraLiveApi';
+import { fetchGlobalLiveEmployees } from '../utils/globalLiveApi';
+import { fetchOverseasLiveEmployees } from '../utils/overseasLiveApi';
+import { classifyOverseasEmployee, OVERSEAS_ENTITY_SLUGS } from '../utils/overseasEntityMapping';
 import type { TabId } from '../App';
 
 interface Props {
   onNavigate: (tab: TabId) => void;
 }
 
-// Koenig and Rayontara are the two entities backed by the live PMS API (see EntityPage.tsx) —
+// Koenig, Rayontara, Global and the 8 overseas country entities (Dubai, USA, UK, New Zealand,
+// Australia, Malaysia, Saudi, Canada) are all backed by the live PMS API (see EntityPage.tsx) —
 // their card counts here should match what actually renders in their Payroll Register rather
 // than the static sample headcount in data/entities.ts. This fetches independently of
 // EntityPage's own fetch, but hits the same server-side plugin cache (vite-plugins/
-// rayontaraApiPlugin.ts), so it's fast except for a genuine first load of the process.
+// rayontaraApiPlugin.ts), so it's fast except for a genuine first load of the process. The 8
+// overseas entities share ONE fetch (same as EntityPage.tsx) — classifyOverseasEmployee splits it
+// into a per-entity count, same routing rules used for the Payroll Register itself.
 export default function OverviewPage({ onNavigate }: Props) {
   const [liveCounts, setLiveCounts] = useState<Partial<Record<string, number>>>({});
 
@@ -27,17 +33,31 @@ export default function OverviewPage({ onNavigate }: Props) {
       if (cancelled || !result.ok) return;
       setLiveCounts((prev) => ({ ...prev, rayontara: result.employees.length }));
     });
+    fetchGlobalLiveEmployees().then((result) => {
+      if (cancelled || !result.ok) return;
+      setLiveCounts((prev) => ({ ...prev, global: result.employees.length }));
+    });
+    fetchOverseasLiveEmployees().then((result) => {
+      if (cancelled || !result.ok) return;
+      const perEntity: Partial<Record<string, number>> = {};
+      for (const slug of OVERSEAS_ENTITY_SLUGS) perEntity[slug] = 0;
+      for (const e of result.employees) {
+        const slug = classifyOverseasEmployee(e);
+        if (slug) perEntity[slug] = (perEntity[slug] ?? 0) + 1;
+      }
+      setLiveCounts((prev) => ({ ...prev, ...perEntity }));
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Only Koenig and Rayontara are backed by a live source. Every other entity's headcount in
-  // data/entities.ts is illustrative sample data, not a real count — showing it alongside two
-  // genuinely live numbers would misleadingly imply it's just as real, so it reads 0 here instead
-  // (while the live entities briefly still fall back to their sample figure only until their own
-  // fetch resolves, to avoid a flash of 0 before the real count arrives).
-  const LIVE_ENTITY_SLUGS = new Set(['koenig', 'rayontara']);
+  // Every other entity's headcount in data/entities.ts is illustrative sample data, not a real
+  // count — showing it alongside genuinely live numbers would misleadingly imply it's just as
+  // real, so it reads 0 here instead (while the live entities briefly still fall back to their
+  // sample figure only until their own fetch resolves, to avoid a flash of 0 before the real count
+  // arrives).
+  const LIVE_ENTITY_SLUGS = new Set(['koenig', 'rayontara', 'global', ...OVERSEAS_ENTITY_SLUGS]);
   const countFor = (slug: string, fallback: number) => {
     if (liveCounts[slug] !== undefined) return liveCounts[slug]!;
     return LIVE_ENTITY_SLUGS.has(slug) ? fallback : 0;
@@ -51,7 +71,7 @@ export default function OverviewPage({ onNavigate }: Props) {
           <h1 className="page-title">Payroll Dashboard</h1>
           <p className="page-desc">
             Automated Payroll Processing Engine — net payable salary computed monthly, per entity, in local
-            currency. Figures below are illustrative sample data for visualization only.
+            currency. Entity cards below show live headcounts from the PMS API once each finishes loading.
           </p>
         </div>
         <div className="pillbar">

@@ -53,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const parsed = readJsonBody<{ rowsJson?: string }>(req);
+    const parsed = readJsonBody<{ rowsJson?: string; force?: boolean }>(req);
     if (parsed === null) {
       res.status(400).json({ ok: false, error: 'Invalid request body' });
       return;
@@ -64,6 +64,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
+      // force:true bypasses the NX guard entirely with a plain overwrite — see
+      // vite-plugins/snapshotPlugin.ts's file-level comment for why this exists (the
+      // "Update Employee List" button needs a real way to make a re-pull actually visible once a
+      // month is frozen, or it's a silent no-op from the user's point of view).
+      if (parsed.force) {
+        await kv.set(key, parsed.rowsJson);
+        res.status(200).json({ ok: true, alreadyFrozen: false });
+        return;
+      }
       // Atomic "only if absent" write — see the file-level comment above for why this replaces
       // the old existsSync-then-writeFileSync check.
       const didSet = await kv.set(key, parsed.rowsJson, { nx: true });

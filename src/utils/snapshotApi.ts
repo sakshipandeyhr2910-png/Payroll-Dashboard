@@ -41,13 +41,16 @@ export type SnapshotSaveResult =
 
 // The server enforces first-write-wins (see vite-plugins/snapshotPlugin.ts) — if a snapshot
 // already exists, this returns THAT content rather than an error, so the caller never needs to
-// special-case "someone else already froze this" vs. "I just froze it".
-export async function saveSnapshot(entitySlug: string, month: string, rows: PayrollRow[]): Promise<SnapshotSaveResult> {
+// special-case "someone else already froze this" vs. "I just froze it". `force: true` bypasses
+// that and overwrites unconditionally — used only by the explicit "Update Employee List" action
+// (see EntityPage.tsx), so a user-requested re-pull of live data is never silently swallowed by an
+// already-frozen month.
+export async function saveSnapshot(entitySlug: string, month: string, rows: PayrollRow[], force = false): Promise<SnapshotSaveResult> {
   try {
     const res = await fetch(`/api/snapshot/${entitySlug}/${month}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rowsJson: encodeRows(rows) }),
+      body: JSON.stringify({ rowsJson: encodeRows(rows), force }),
     });
     const data = await res.json();
     if (!data.ok) return { ok: false, error: data.error || 'Snapshot save failed' };

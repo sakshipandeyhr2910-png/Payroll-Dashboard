@@ -8,7 +8,6 @@ import { fetchSnapshot, saveSnapshot } from '../utils/snapshotApi';
 import { weekdaysInMonth, presentDaysForMonth, hasJoinedByMonth } from '../utils/attendance';
 import { professionalTaxForLocation } from '../utils/professionalTax';
 import { downloadXlsx } from '../utils/xlsxExport';
-import { entityCurrencies } from '../utils/currencies';
 import { fetchRayontaraLiveEmployees, type PmsEmployee } from '../utils/rayontaraLiveApi';
 import { fetchRayontaraAppraisal, type AppraisalRecord } from '../utils/rayontaraAppraisalApi';
 import { fetchRayontaraLoans, type LoanAdvanceRecord } from '../utils/rayontaraLoanApi';
@@ -30,7 +29,12 @@ import { fetchKoenigArrear } from '../utils/koenigArrearApi';
 import { buildKoenigLiveRows } from '../utils/koenigLiveRows';
 import { koenigCache, refreshKoenigEmployeeList } from '../utils/koenigCache';
 import { fetchGlobalLiveEmployees, type GlobalEmployeeRaw } from '../utils/globalLiveApi';
+import { fetchGlobalWfhReimbursements, type WfhReimbursementRecord } from '../utils/globalWfhApi';
 import { globalCache, refreshGlobalEmployeeList } from '../utils/globalCache';
+import { fetchOverseasLiveEmployees, type OverseasEmployeeRaw } from '../utils/overseasLiveApi';
+import { overseasCache, refreshOverseasEmployeeList } from '../utils/overseasCache';
+import { buildOverseasLiveRows } from '../utils/overseasLiveRows';
+import { classifyOverseasEmployee, OVERSEAS_ENTITY_SLUGS, type OverseasEntitySlug } from '../utils/overseasEntityMapping';
 import MonthControl from './MonthControl';
 import CategoryChips from './CategoryChips';
 import CurrencyChips, { type CurrencyFilterValue } from './CurrencyChips';
@@ -253,13 +257,10 @@ export default function EntityPage({
 
   useEffect(() => {
     if (entity.slug !== 'koenig') return;
-    if (koenigCache.employees !== null) {
-      setKoenigEmployees(koenigCache.employees);
-      setKoenigCodeStats(koenigCache.codeStats);
-      setKoenigError(null);
-      setKoenigLoading(false);
-      return;
-    }
+    // Always refetches from the backend on every visit to this tab — no client-side "skip if
+    // already cached" shortcut. koenigCache still exists purely so the previous fetch's data stays
+    // on screen (rather than flashing empty) while this fresh one is in flight; it's written to
+    // below, never read to decide whether to fetch.
     let cancelled = false;
     setKoenigLoading(true);
     setKoenigError(null);
@@ -598,18 +599,13 @@ export default function EntityPage({
 
   useEffect(() => {
     if (entity.slug !== 'global') return;
-    if (globalCache.employees !== null) {
-      setGlobalEmployees(globalCache.employees);
-      setGlobalCodeStats(globalCache.codeStats);
-      setGlobalError(null);
-      setGlobalLoading(false);
-      return;
-    }
+    // Always refetches from the backend on every visit — see the Koenig effect above for why the
+    // cache-based "skip if already fetched" shortcut was removed.
     let cancelled = false;
     setGlobalLoading(true);
     setGlobalError(null);
-    // Same reasoning as the Koenig effect above — only an explicit "Update Employee List" click
-    // (globalRefreshTrigger > 0) should force the server to redo its cached code-matching scan.
+    // Only an explicit "Update Employee List" click (globalRefreshTrigger > 0) should force the
+    // server to redo its cached code-matching scan.
     fetchGlobalLiveEmployees(globalRefreshTrigger > 0).then((result) => {
       if (cancelled) return;
       setGlobalLoading(false);
@@ -813,30 +809,362 @@ export default function EntityPage({
     };
   }, [entity.slug, globalEmployees, selectedMonth, globalRefreshTrigger]);
 
+  // Employee Leave Details, same month-scoped-per-code shape as Recovery/TDS above. Global was
+  // previously excluded from Leave Days (Koenig/Rayontara only), but now wires into the same
+  // generic Employee Leave Details API (api_key 357) via the shared fetchKoenigLeave client.
+  const [globalLeave, setGlobalLeave] = useState<LeaveRecord[] | null>(
+    () => globalCache.leaveByMonth.get(selectedMonth) ?? null,
+  );
+  const [globalLeaveError, setGlobalLeaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (entity.slug !== 'global' || !globalEmployees) return;
+    const cached = globalCache.leaveByMonth.get(selectedMonth);
+    if (cached !== undefined) {
+      setGlobalLeave(cached);
+      setGlobalLeaveError(null);
+      return;
+    }
+    const codes = globalEmployees.map((e) => e.code).filter((c): c is number => c !== null);
+    if (codes.length === 0) {
+      globalCache.leaveByMonth.set(selectedMonth, []);
+      setGlobalLeave([]);
+      setGlobalLeaveError(null);
+      return;
+    }
+    let cancelled = false;
+    setGlobalLeaveError(null);
+    fetchKoenigLeave(codes, selectedMonth).then((result) => {
+      if (cancelled) return;
+      if (result.ok) {
+        globalCache.leaveByMonth.set(selectedMonth, result.records);
+        setGlobalLeave(result.records);
+      } else {
+        setGlobalLeave(null);
+        setGlobalLeaveError(result.error);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [entity.slug, globalEmployees, selectedMonth, globalRefreshTrigger]);
+
+  // WFH Infra Reimbursement — Global-DMCC-only (FR-30 / BR-17), month-scoped like Leave/Recovery/
+  // TDS above, but a single company-wide bulk query (no EmpCode list needed in the request) rather
+  // than per-code, same shape as Meal Passes.
+  const [globalWfh, setGlobalWfh] = useState<WfhReimbursementRecord[] | null>(
+    () => globalCache.wfhByMonth.get(selectedMonth) ?? null,
+  );
+  const [globalWfhError, setGlobalWfhError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (entity.slug !== 'global' || !globalEmployees) return;
+    const cached = globalCache.wfhByMonth.get(selectedMonth);
+    if (cached !== undefined) {
+      setGlobalWfh(cached);
+      setGlobalWfhError(null);
+      return;
+    }
+    let cancelled = false;
+    setGlobalWfhError(null);
+    fetchGlobalWfhReimbursements(selectedMonth).then((result) => {
+      if (cancelled) return;
+      if (result.ok) {
+        globalCache.wfhByMonth.set(selectedMonth, result.records);
+        setGlobalWfh(result.records);
+      } else {
+        setGlobalWfh(null);
+        setGlobalWfhError(result.error);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [entity.slug, globalEmployees, selectedMonth, globalRefreshTrigger]);
+
+  // GetLastTwoAppraisals (Appraisal Arrear) — not month-scoped, same shape as koenigArrear above.
+  // Previously Koenig/Rayontara-only per explicit request; now also wired for Global.
+  const [globalArrear, setGlobalArrear] = useState<ArrearRecord[] | null>(() => globalCache.arrear);
+  const [globalArrearLoading, setGlobalArrearLoading] = useState(false);
+  const [globalArrearError, setGlobalArrearError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (entity.slug !== 'global' || !globalEmployees) return;
+    if (globalCache.arrear !== null) {
+      setGlobalArrear(globalCache.arrear);
+      setGlobalArrearError(null);
+      setGlobalArrearLoading(false);
+      return;
+    }
+    const codes = globalEmployees.map((e) => e.code).filter((c): c is number => c !== null);
+    if (codes.length === 0) {
+      globalCache.arrear = [];
+      setGlobalArrear([]);
+      setGlobalArrearError(null);
+      setGlobalArrearLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setGlobalArrearLoading(true);
+    setGlobalArrearError(null);
+    fetchKoenigArrear(codes).then((result) => {
+      if (cancelled) return;
+      setGlobalArrearLoading(false);
+      if (result.ok) {
+        globalCache.arrear = result.records;
+        setGlobalArrear(result.records);
+      } else {
+        setGlobalArrear(null);
+        setGlobalArrearError(result.error);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [entity.slug, globalEmployees, globalRefreshTrigger]);
+
+  // Overseas employees (Is_oversease=true) power 8 separate country-specific entity tabs (Dubai,
+  // USA, UK, New Zealand, Australia, Malaysia, Saudi, Canada) from ONE shared fetch — each tab
+  // filters this same list down to its own entity via classifyOverseasEmployee (see
+  // utils/overseasEntityMapping.ts for the FZLLC-tag / Payroll Processing Location routing rules).
+  // Only employee-master fields are live here (no Appraisal/Loan/Meal/Recovery/TDS/Leave/WFH
+  // integration for these entities), same reasoning as Koenig's own PMS-only fields.
+  const isOverseasEntity = OVERSEAS_ENTITY_SLUGS.includes(entity.slug as OverseasEntitySlug);
+  const [overseasRefreshTrigger, setOverseasRefreshTrigger] = useState(0);
+  const [overseasEmployees, setOverseasEmployees] = useState<OverseasEmployeeRaw[] | null>(() => overseasCache.employees);
+  const [overseasLoading, setOverseasLoading] = useState(false);
+  const [overseasError, setOverseasError] = useState<string | null>(null);
+  const [overseasCodeStats, setOverseasCodeStats] = useState<{ matched: number; total: number } | null>(
+    () => overseasCache.codeStats,
+  );
+
+  useEffect(() => {
+    if (!isOverseasEntity) return;
+    // Always refetches from the backend on every visit — see the Koenig effect above for why the
+    // cache-based "skip if already fetched" shortcut was removed.
+    let cancelled = false;
+    setOverseasLoading(true);
+    setOverseasError(null);
+    fetchOverseasLiveEmployees(overseasRefreshTrigger > 0).then((result) => {
+      if (cancelled) return;
+      setOverseasLoading(false);
+      if (result.ok) {
+        overseasCache.employees = result.employees;
+        overseasCache.codeStats = { matched: result.matched, total: result.total };
+        setOverseasEmployees(result.employees);
+        setOverseasCodeStats({ matched: result.matched, total: result.total });
+      } else {
+        setOverseasEmployees(null);
+        setOverseasCodeStats(null);
+        setOverseasError(result.error);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOverseasEntity, overseasRefreshTrigger]);
+
+  const overseasEmployeesForEntity = useMemo(() => {
+    if (!overseasEmployees) return null;
+    return overseasEmployees.filter((e) => classifyOverseasEmployee(e) === entity.slug);
+  }, [overseasEmployees, entity.slug]);
+
+  // Pay Scale (Appraisal API) for the overseas population — one shared fetch covering all 20
+  // overseas employees' codes backs all 8 country tabs, same as the employee list itself. Unlike
+  // Koenig/Rayontara/Global, PF and NPS are deliberately NOT wired through from this record for
+  // overseas rows (see overseasLiveRows.ts) — those are India-specific figures the Appraisal API
+  // also happens to return, and every overseas entity's own notes already say India-specific
+  // statutory deductions don't apply here. Only Pay Scale (and the Salary/ESI it derives, per the
+  // generic — not entity-scoped — computation below) is relevant overseas... except ESI, which
+  // IS explicitly re-scoped below (see isAppraisalPfEntity) for the same India-specific reason.
+  const [overseasAppraisal, setOverseasAppraisal] = useState<AppraisalRecord[] | null>(() => overseasCache.appraisal);
+  const [overseasAppraisalLoading, setOverseasAppraisalLoading] = useState(false);
+  const [overseasAppraisalError, setOverseasAppraisalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOverseasEntity || !overseasEmployees) return;
+    if (overseasCache.appraisal !== null) {
+      setOverseasAppraisal(overseasCache.appraisal);
+      setOverseasAppraisalError(null);
+      setOverseasAppraisalLoading(false);
+      return;
+    }
+    const codes = overseasEmployees.map((e) => e.code).filter((c): c is number => c !== null);
+    if (codes.length === 0) {
+      overseasCache.appraisal = [];
+      setOverseasAppraisal([]);
+      setOverseasAppraisalError(null);
+      setOverseasAppraisalLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setOverseasAppraisalLoading(true);
+    setOverseasAppraisalError(null);
+    fetchKoenigAppraisal(codes).then((result) => {
+      if (cancelled) return;
+      setOverseasAppraisalLoading(false);
+      if (result.ok) {
+        overseasCache.appraisal = result.records;
+        setOverseasAppraisal(result.records);
+      } else {
+        setOverseasAppraisal(null);
+        setOverseasAppraisalError(result.error);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOverseasEntity, overseasEmployees, overseasRefreshTrigger]);
+
+  // Loan Advance — one shared fetch across all 20 overseas employees, same as Appraisal above, but
+  // only ever DISPLAYED for USA/UK/New Zealand/Australia/Malaysia/Saudi/Canada, not Dubai, per
+  // explicit request (see OVERSEAS_LOAN_ARREAR_SLUGS below).
+  const [overseasLoans, setOverseasLoans] = useState<LoanAdvanceRecord[] | null>(() => overseasCache.loans);
+  const [overseasLoanLoading, setOverseasLoanLoading] = useState(false);
+  const [overseasLoanError, setOverseasLoanError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOverseasEntity || !overseasEmployees) return;
+    if (overseasCache.loans !== null) {
+      setOverseasLoans(overseasCache.loans);
+      setOverseasLoanError(null);
+      setOverseasLoanLoading(false);
+      return;
+    }
+    const codes = overseasEmployees.map((e) => e.code).filter((c): c is number => c !== null);
+    if (codes.length === 0) {
+      overseasCache.loans = [];
+      setOverseasLoans([]);
+      setOverseasLoanError(null);
+      setOverseasLoanLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setOverseasLoanLoading(true);
+    setOverseasLoanError(null);
+    fetchKoenigLoans(codes).then((result) => {
+      if (cancelled) return;
+      setOverseasLoanLoading(false);
+      if (result.ok) {
+        overseasCache.loans = result.records;
+        setOverseasLoans(result.records);
+      } else {
+        setOverseasLoans(null);
+        setOverseasLoanError(result.error);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOverseasEntity, overseasEmployees, overseasRefreshTrigger]);
+
+  // GetLastTwoAppraisals (Appraisal Arrear) — same shared-fetch shape as Loan above.
+  const [overseasArrear, setOverseasArrear] = useState<ArrearRecord[] | null>(() => overseasCache.arrear);
+  const [overseasArrearLoading, setOverseasArrearLoading] = useState(false);
+  const [overseasArrearError, setOverseasArrearError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOverseasEntity || !overseasEmployees) return;
+    if (overseasCache.arrear !== null) {
+      setOverseasArrear(overseasCache.arrear);
+      setOverseasArrearError(null);
+      setOverseasArrearLoading(false);
+      return;
+    }
+    const codes = overseasEmployees.map((e) => e.code).filter((c): c is number => c !== null);
+    if (codes.length === 0) {
+      overseasCache.arrear = [];
+      setOverseasArrear([]);
+      setOverseasArrearError(null);
+      setOverseasArrearLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setOverseasArrearLoading(true);
+    setOverseasArrearError(null);
+    fetchKoenigArrear(codes).then((result) => {
+      if (cancelled) return;
+      setOverseasArrearLoading(false);
+      if (result.ok) {
+        overseasCache.arrear = result.records;
+        setOverseasArrear(result.records);
+      } else {
+        setOverseasArrear(null);
+        setOverseasArrearError(result.error);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOverseasEntity, overseasEmployees, overseasRefreshTrigger]);
+
+  // Recovery Panel (VPF/TA-DA/Recovery) — month-scoped, same shape as globalRecovery above.
+  // Currently only displayed on Dubai (see isRecoveryScopedEntity below) but fetched for the whole
+  // shared overseas population, same pattern as every other overseas sub-fetch.
+  const [overseasRecovery, setOverseasRecovery] = useState<RecoveryRecord[] | null>(
+    () => overseasCache.recoveryByMonth.get(selectedMonth) ?? null,
+  );
+  const [overseasRecoveryError, setOverseasRecoveryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOverseasEntity || !overseasEmployees) return;
+    const cached = overseasCache.recoveryByMonth.get(selectedMonth);
+    if (cached !== undefined) {
+      setOverseasRecovery(cached);
+      setOverseasRecoveryError(null);
+      return;
+    }
+    const codes = overseasEmployees.map((e) => e.code).filter((c): c is number => c !== null);
+    if (codes.length === 0) {
+      overseasCache.recoveryByMonth.set(selectedMonth, []);
+      setOverseasRecovery([]);
+      setOverseasRecoveryError(null);
+      return;
+    }
+    let cancelled = false;
+    setOverseasRecoveryError(null);
+    fetchKoenigRecovery(codes, selectedMonth).then((result) => {
+      if (cancelled) return;
+      if (result.ok) {
+        overseasCache.recoveryByMonth.set(selectedMonth, result.records);
+        setOverseasRecovery(result.records);
+      } else {
+        setOverseasRecovery(null);
+        setOverseasRecoveryError(result.error);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOverseasEntity, overseasEmployees, selectedMonth, overseasRefreshTrigger]);
+
   const appraisalByCode = useMemo(() => {
     const map = new Map<number, AppraisalRecord>();
     (liveAppraisal || []).forEach((r) => map.set(r.code, r));
     (koenigAppraisal || []).forEach((r) => map.set(r.code, r));
     (globalAppraisal || []).forEach((r) => map.set(r.code, r));
+    (overseasAppraisal || []).forEach((r) => map.set(r.code, r));
     return map;
-  }, [liveAppraisal, koenigAppraisal, globalAppraisal]);
+  }, [liveAppraisal, koenigAppraisal, globalAppraisal, overseasAppraisal]);
 
   const loansByCode = useMemo(() => {
     const map = new Map<number, LoanAdvanceRecord[]>();
-    [...(liveLoans || []), ...(koenigLoans || []), ...(globalLoans || [])].forEach((r) => {
+    [...(liveLoans || []), ...(koenigLoans || []), ...(globalLoans || []), ...(overseasLoans || [])].forEach((r) => {
       const existing = map.get(r.code) || [];
       existing.push(r);
       map.set(r.code, existing);
     });
     return map;
-  }, [liveLoans, koenigLoans, globalLoans]);
+  }, [liveLoans, koenigLoans, globalLoans, overseasLoans]);
 
-  // Appraisal Arrear is scoped to Koenig and Rayontara only per explicit request — no Global source.
+  // Appraisal Arrear is scoped to Koenig, Rayontara and the 7 non-Dubai overseas entities per
+  // explicit request — no Global source, and Dubai deliberately excluded (see
+  // OVERSEAS_LOAN_ARREAR_SLUGS below).
   const arrearByCode = useMemo(() => {
     const map = new Map<number, ArrearRecord>();
-    [...(liveArrear || []), ...(koenigArrear || [])].forEach((r) => map.set(r.code, r));
+    [...(liveArrear || []), ...(koenigArrear || []), ...(globalArrear || []), ...(overseasArrear || [])].forEach((r) => map.set(r.code, r));
     return map;
-  }, [liveArrear, koenigArrear]);
+  }, [liveArrear, koenigArrear, globalArrear, overseasArrear]);
 
   const mealsByCode = useMemo(() => {
     const map = new Map<number, number>();
@@ -846,9 +1174,9 @@ export default function EntityPage({
 
   const recoveryByCode = useMemo(() => {
     const map = new Map<number, RecoveryRecord>();
-    [...(liveRecovery || []), ...(koenigRecovery || []), ...(globalRecovery || [])].forEach((r) => map.set(r.code, r));
+    [...(liveRecovery || []), ...(koenigRecovery || []), ...(globalRecovery || []), ...(overseasRecovery || [])].forEach((r) => map.set(r.code, r));
     return map;
-  }, [liveRecovery, koenigRecovery, globalRecovery]);
+  }, [liveRecovery, koenigRecovery, globalRecovery, overseasRecovery]);
 
   const tdsByCode = useMemo(() => {
     const map = new Map<number, number>();
@@ -856,33 +1184,43 @@ export default function EntityPage({
     return map;
   }, [liveTds, koenigTds, globalTds]);
 
-  // Leave Days is scoped to Koenig and Rayontara only per explicit request — no Global source here.
   const leaveByCode = useMemo(() => {
     const map = new Map<number, number>();
-    [...(liveLeave || []), ...(koenigLeave || [])].forEach((r) => map.set(r.code, r.leaveDays));
+    [...(liveLeave || []), ...(koenigLeave || []), ...(globalLeave || [])].forEach((r) => map.set(r.code, r.leaveDays));
     return map;
-  }, [liveLeave, koenigLeave]);
+  }, [liveLeave, koenigLeave, globalLeave]);
+
+  // WFH Infra Reimbursement is Global-DMCC-only — no Koenig/Rayontara source.
+  const wfhByCode = useMemo(() => {
+    const map = new Map<number, number>();
+    (globalWfh || []).forEach((r) => map.set(r.code, r.wfhAmount));
+    return map;
+  }, [globalWfh]);
 
   const rawRows = useMemo(() => {
     if (entity.slug === 'rayontara') {
       return liveEmployees ? buildRayontaraLiveRows(liveEmployees, appraisalByCode) : staticRows;
     }
     if (entity.slug === 'koenig') {
-      return koenigEmployees ? buildKoenigLiveRows(koenigEmployees, appraisalByCode) : staticRows;
+      return koenigEmployees ? buildKoenigLiveRows(koenigEmployees, appraisalByCode, entity.currency) : staticRows;
     }
     if (entity.slug === 'global') {
-      return globalEmployees ? buildKoenigLiveRows(globalEmployees, appraisalByCode) : staticRows;
+      return globalEmployees ? buildKoenigLiveRows(globalEmployees, appraisalByCode, entity.currency) : staticRows;
+    }
+    if (isOverseasEntity) {
+      return overseasEmployeesForEntity ? buildOverseasLiveRows(overseasEmployeesForEntity, entity.currency, appraisalByCode) : staticRows;
     }
     return staticRows;
-  }, [entity.slug, staticRows, liveEmployees, appraisalByCode, koenigEmployees, globalEmployees]);
+  }, [entity.slug, entity.currency, staticRows, liveEmployees, appraisalByCode, koenigEmployees, globalEmployees, isOverseasEntity, overseasEmployeesForEntity]);
 
   const rayontaraIsLive = entity.slug === 'rayontara' && !!liveEmployees;
   const koenigIsLive = entity.slug === 'koenig' && !!koenigEmployees;
   const globalIsLive = entity.slug === 'global' && !!globalEmployees;
-  const entityIsLiveNow = rayontaraIsLive || koenigIsLive || globalIsLive;
+  const overseasIsLive = isOverseasEntity && !!overseasEmployeesForEntity;
+  const entityIsLiveNow = rayontaraIsLive || koenigIsLive || globalIsLive || overseasIsLive;
 
   const liveComputedRows = useMemo(() => {
-    const scaled = (entity.source === 'live' || rayontaraIsLive || koenigIsLive || globalIsLive)
+    const scaled = (entity.source === 'live' || rayontaraIsLive || koenigIsLive || globalIsLive || overseasIsLive)
       ? rawRows
       : rawRows.map((r) => applyMonthFactor(r, sampleFactor(selectedMonth)));
 
@@ -939,16 +1277,19 @@ export default function EntityPage({
         ? Math.round((payScaleForMonth(arrearByCode.get(r.code), selectedMonth, r.payScaleAmount) / calendarTotalDays) * totalDaysAfterLeaveTaken * 100) / 100
         : r.gross;
       const round2 = (n: number) => Math.round(n * 100) / 100;
-      const esi = r.payScaleAmount !== undefined
+      // ESI and PF are India-specific statutory deductions (EPF/ESI/PT do not apply overseas, per
+      // every overseas entity's own notes) — scoped to Koenig/Rayontara/Global even though the same
+      // live Appraisal API also returns an EPF figure for overseas employees now that Pay Scale is
+      // wired up for them (see overseasLiveRows.ts). Only Salary derives from Pay Scale for every
+      // entity — ESI and PF stay "—" for overseas.
+      const isAppraisalPfEntity = entity.slug === 'koenig' || entity.slug === 'rayontara' || entity.slug === 'global';
+      const esi = r.payScaleAmount !== undefined && isAppraisalPfEntity
         ? (r.payScaleAmount < 21000 ? round2(gross * 0.0075) : 0)
         : r.esi;
       // PF proration: the Appraisal Master API returns a flat ₹1800 for most employees regardless
       // of days actually worked — correct once someone's been present the full month, but
       // overstated for a brand-new joiner's partial first month. Only the ₹1800 bucket is
       // touched — ₹0 and any custom fixed amount pass through exactly as the API returned them.
-      // Scoped to Koenig/Rayontara/Global — the only entities whose PF actually comes from this
-      // live Appraisal API (everyone else's PF is sample/static data).
-      const isAppraisalPfEntity = entity.slug === 'koenig' || entity.slug === 'rayontara' || entity.slug === 'global';
       const pf = isAppraisalPfEntity && r.pf === 1800 && totalDaysAfterLeaveTaken !== undefined && calendarTotalDays > 0
         ? (totalDaysAfterLeaveTaken === calendarTotalDays
             ? r.pf // present the whole month (joined in an earlier month) — no proration
@@ -961,41 +1302,64 @@ export default function EntityPage({
       // it shows "—" rather than 0.
       const isRealCodeEntity = entity.slug === 'rayontara' || entity.slug === 'koenig' || entity.slug === 'global';
       const hasRealCode = isRealCodeEntity && !Number.isNaN(r.code);
+      // Loan Amount and Appraisal Arrear are scoped to ALL 8 overseas entities (Dubai included, as
+      // of this explicit request — previously excluded) — kept as their own flag rather than
+      // folded into isRealCodeEntity/hasRealCode above so Meal/TDS stay untouched (still
+      // Koenig/Rayontara/Global only; not requested for any overseas entity).
+      const isLoanScopedEntity = isRealCodeEntity || isOverseasEntity;
+      const hasRealCodeForLoan = isLoanScopedEntity && !Number.isNaN(r.code);
       const employeeLoans = loansByCode.get(r.code);
-      const loan = hasRealCode
+      const loan = hasRealCodeForLoan
         ? (employeeLoans ? totalLoanDeductionForMonth(employeeLoans, selectedMonth) : 0)
-        : isRealCodeEntity ? NaN : r.loan;
+        : isLoanScopedEntity ? NaN : r.loan;
       const mealpass = hasRealCode
         ? (mealsByCode.get(r.code) ?? 0)
         : isRealCodeEntity ? NaN : r.mealpass;
+      // Recovery Panel (VPF/TA-DA/Recovery) is ALSO scoped to Dubai specifically per this explicit
+      // request — the other 7 overseas entities weren't asked for it and stay unwired (their
+      // columns are hidden anyway — see OVERSEAS_NON_DUBAI_HIDDEN_COLS). VPF itself stays hidden
+      // on Dubai too (see DUBAI_HIDDEN_COLS) even though it's computed here alongside TA-DA/Recovery
+      // — all three come from the same Recovery Panel record, so there's no separate call to skip.
+      const isRecoveryScopedEntity = isRealCodeEntity || entity.slug === 'dubai';
+      const hasRealCodeForRecovery = isRecoveryScopedEntity && !Number.isNaN(r.code);
       const recoveryRecord = recoveryByCode.get(r.code);
-      const vpf = hasRealCode ? (recoveryRecord?.vpf ?? 0) : isRealCodeEntity ? NaN : r.vpf;
-      const tada = hasRealCode ? (recoveryRecord?.tada ?? 0) : isRealCodeEntity ? NaN : r.tada;
-      const recovery = hasRealCode ? (recoveryRecord?.recovery ?? 0) : isRealCodeEntity ? NaN : r.recovery;
-      const remarks = hasRealCode && recoveryRecord?.remarks
+      const vpf = hasRealCodeForRecovery ? (recoveryRecord?.vpf ?? 0) : isRecoveryScopedEntity ? NaN : r.vpf;
+      const tada = hasRealCodeForRecovery ? (recoveryRecord?.tada ?? 0) : isRecoveryScopedEntity ? NaN : r.tada;
+      const recovery = hasRealCodeForRecovery ? (recoveryRecord?.recovery ?? 0) : isRecoveryScopedEntity ? NaN : r.recovery;
+      const remarks = hasRealCodeForRecovery && recoveryRecord?.remarks
         ? [r.remarks, recoveryRecord.remarks].filter(Boolean).join(' | ')
         : r.remarks;
       const tds = hasRealCode ? (tdsByCode.get(r.code) ?? 0) : isRealCodeEntity ? NaN : r.tds;
-      // Leave Days is scoped to Koenig and Rayontara only per explicit request (no Global source
-      // wired in) — Taken Leaves from the Employee Leave Details API, matched by Emp Code and the
-      // selected month. "No leave record for this employee this month" is a real, known zero
-      // (same reasoning as Loan/Meal/Recovery/TDS above), not an unknown — except when the Emp
-      // Code itself couldn't be matched, which stays "—". Every other entity keeps the existing
-      // DOJ-derived Total Days − Total Days After Leave Taken figure, computed below.
-      const isLeaveScopedEntity = entity.slug === 'koenig' || entity.slug === 'rayontara';
-      // Appraisal Arrear is scoped to Koenig and Rayontara only per explicit request (no Global
-      // source wired in) — (New Salary − Old Salary) × pending months, shown only in the month
-      // the appraisal was actually processed (see utils/arrearCalculation.ts). An employee with no
-      // arrear record, or whose Emp Code couldn't be matched, both show 0/—- same reasoning as
-      // every other Koenig/Rayontara-scoped column above.
-      const isArrearScopedEntity = entity.slug === 'koenig' || entity.slug === 'rayontara';
+      // Leave Days is scoped to Koenig, Rayontara and Global — Taken Leaves from the Employee
+      // Leave Details API, matched by Emp Code and the selected month. "No leave record for this
+      // employee this month" is a real, known zero (same reasoning as Loan/Meal/Recovery/TDS
+      // above), not an unknown — except when the Emp Code itself couldn't be matched, which stays
+      // "—". Every other entity keeps the existing DOJ-derived Total Days − Total Days After
+      // Leave Taken figure, computed below.
+      const isLeaveScopedEntity = entity.slug === 'koenig' || entity.slug === 'rayontara' || entity.slug === 'global';
+      // Appraisal Arrear is scoped to Koenig, Rayontara, Global, and (as of this explicit request,
+      // Dubai now included) all 8 overseas entities — (New Salary − Old Salary) × pending months,
+      // shown only in the month the appraisal was actually processed (see
+      // utils/arrearCalculation.ts). An employee with no arrear record, or whose Emp Code couldn't
+      // be matched, both show 0/— same reasoning as every other arrear-scoped column above.
+      const isArrearScopedEntity = entity.slug === 'koenig' || entity.slug === 'rayontara' || entity.slug === 'global' || isOverseasEntity;
       const appraisalArrear = isArrearScopedEntity
-        ? (hasRealCode ? appraisalArrearForMonth(arrearByCode.get(r.code), selectedMonth) : NaN)
+        ? (hasRealCodeForLoan ? appraisalArrearForMonth(arrearByCode.get(r.code), selectedMonth) : NaN)
         : r.appraisalArrear;
       const pt = professionalTaxForLocation(r.location);
+      // WFH Infra Reimbursement is Global-DMCC-only (FR-30 / BR-17), from the WFH_Infra_Reimbursement
+      // API (api_key 17), matched by Emp Code and the selected month — same "known zero, not
+      // unknown" reasoning as Loan/Meal/Recovery/TDS above: no approved reimbursement on file for
+      // this employee this month is a real, known 0, not an unknown. Every other entity keeps its
+      // existing WFH Reimbursement figure (sample entities have a static value; Koenig/Rayontara
+      // have none, so it stays NaN — see koenigLiveRows.ts/rayontaraLiveRows.ts).
+      const isWfhScopedEntity = entity.slug === 'global';
+      const wfh = isWfhScopedEntity
+        ? (hasRealCode ? (wfhByCode.get(r.code) ?? 0) : NaN)
+        : r.wfh;
       // Net Payable = Salary − (PF + ESI + Loan + TDS + NPS) + (Arrear + Overtime)
       //             − (DA + VPF + TA/DA + Recovery + Professional Tax) + Appraisal Arrear − Meal Passes
-      //             + Commission.
+      //             + Commission + WFH Reimbursement.
       // Applied to every row of every entity using each row's own (possibly just-recomputed above)
       // column values. A missing deduction/allowance line item contributes 0, like a blank cell
       // in a spreadsheet formula — but Salary itself is the base the whole figure is built on, not
@@ -1010,6 +1374,7 @@ export default function EntityPage({
           + toCalcNumber(appraisalArrear)
           - toCalcNumber(mealpass)
           + toCalcNumber(r.commission)
+          + toCalcNumber(wfh)
       );
       // How many of this month's working days fell before the employee's DOJ (or after, if not
       // yet joined) — NaN when totalDaysAfterLeaveTaken itself is unknown, same as every other
@@ -1044,6 +1409,7 @@ export default function EntityPage({
         remarks,
         tds,
         net,
+        wfh,
         appraisalArrear,
         // Koenig and Rayontara use the PMS API's own working_days field per employee (matched by
         // Emp Code via r.workingDaysPerWeek, set in koenigLiveRows.ts/rayontaraLiveRows.ts) rather
@@ -1069,7 +1435,7 @@ export default function EntityPage({
           : (entity.slug === 'koenig' || entity.slug === 'rayontara') ? 'White' : r.category,
       };
     }).filter((r) => hasJoinedByMonth(r.dojRaw, selectedMonth));
-  }, [entity.slug, entity.source, rawRows, selectedMonth, loansByCode, mealsByCode, recoveryByCode, tdsByCode, leaveByCode, arrearByCode, rayontaraIsLive, koenigIsLive, globalIsLive]);
+  }, [entity.slug, entity.source, rawRows, selectedMonth, loansByCode, mealsByCode, recoveryByCode, tdsByCode, leaveByCode, wfhByCode, arrearByCode, rayontaraIsLive, koenigIsLive, globalIsLive, overseasIsLive]);
 
   // Month-end freeze (live entities only — Koenig/Rayontara/Global; sample entities are already
   // deterministic per month via applyMonthFactor, with no live-API variability to freeze against).
@@ -1082,9 +1448,56 @@ export default function EntityPage({
   // Guards against re-POSTing the same entity+month twice (e.g. a re-render firing before the
   // in-flight save's own response has updated snapshotStatus to 'frozen').
   const snapshotSaveAttempted = useRef<string | null>(null);
+  // Set by the "Update Employee List" button (Koenig/Global/Overseas) to force-overwrite an
+  // already-frozen snapshot with freshly re-pulled data once it's ready — see the force-overwrite
+  // effect below and vite-plugins/snapshotPlugin.ts's file-level comment for why this exists.
+  // Cleared the moment that effect actually fires, so one click means one overwrite, not a
+  // standing "always force" mode.
+  const forceSnapshotOverwrite = useRef(false);
 
   const monthIsCompleted = isMonthCompleted(selectedMonth);
   const snapshotKey = `${entity.slug}:${selectedMonth}`;
+
+  // Root-cause fix for a real bug (not just stale test data): liveComputedRows.length > 0 the
+  // MOMENT the base employee list resolves — well before any of that entity's slower sub-fetches
+  // (Appraisal, Loan, Meal, Recovery, TDS, Leave, WFH) have finished. The freeze effect below used
+  // to fire on that very first pass, permanently locking in a snapshot missing Pay Scale/Loan/etc.
+  // (server-enforced first-write-wins, no way to un-freeze except deleting the file) — every time a
+  // new live column was added, the very first person to view a given month would freeze it before
+  // that column ever had a chance to load. This checks every sub-fetch relevant to the currently
+  // active live entity has actually settled (resolved OR errored — either way, no longer pending)
+  // before the freeze is allowed to fire at all.
+  const liveDataSettled = entity.slug === 'rayontara'
+    ? (!liveLoading
+        && (liveRecovery !== null || recoveryError !== null)
+        && (liveTds !== null || tdsError !== null)
+        && (liveLeave !== null || leaveError !== null))
+    : entity.slug === 'koenig'
+      ? ((koenigEmployees !== null || koenigError !== null)
+        && (koenigAppraisal !== null || koenigAppraisalError !== null)
+        && (koenigLoans !== null || koenigLoanError !== null)
+        && (koenigMeals !== null || koenigMealError !== null)
+        && (koenigRecovery !== null || koenigRecoveryError !== null)
+        && (koenigTds !== null || koenigTdsError !== null)
+        && (koenigLeave !== null || koenigLeaveError !== null)
+        && (koenigArrear !== null || koenigArrearError !== null))
+      : entity.slug === 'global'
+        ? ((globalEmployees !== null || globalError !== null)
+          && (globalAppraisal !== null || globalAppraisalError !== null)
+          && (globalLoans !== null || globalLoanError !== null)
+          && (globalMeals !== null || globalMealError !== null)
+          && (globalRecovery !== null || globalRecoveryError !== null)
+          && (globalTds !== null || globalTdsError !== null)
+          && (globalLeave !== null || globalLeaveError !== null)
+          && (globalWfh !== null || globalWfhError !== null)
+          && (globalArrear !== null || globalArrearError !== null))
+        : isOverseasEntity
+          ? ((overseasEmployees !== null || overseasError !== null)
+            && (overseasAppraisal !== null || overseasAppraisalError !== null)
+            && (overseasLoans !== null || overseasLoanError !== null)
+            && (overseasArrear !== null || overseasArrearError !== null)
+            && (overseasRecovery !== null || overseasRecoveryError !== null))
+          : true; // sample entities never take this path — entityIsLiveNow is false for them
 
   useEffect(() => {
     setSnapshotRows(null);
@@ -1107,6 +1520,9 @@ export default function EntityPage({
     if (!entityIsLiveNow || !monthIsCompleted) return;
     if (snapshotStatus !== 'none') return;
     if (liveComputedRows.length === 0) return;
+    // See liveDataSettled's own comment above — without this, the freeze fires on the very first
+    // (incomplete) computed pass, before slower sub-fetches like Appraisal have resolved.
+    if (!liveDataSettled) return;
     if (snapshotSaveAttempted.current === snapshotKey) return;
     snapshotSaveAttempted.current = snapshotKey;
     saveSnapshot(entity.slug, selectedMonth, liveComputedRows).then((result) => {
@@ -1120,7 +1536,43 @@ export default function EntityPage({
         snapshotSaveAttempted.current = null;
       }
     });
-  }, [entityIsLiveNow, monthIsCompleted, snapshotStatus, snapshotKey, entity.slug, selectedMonth, liveComputedRows]);
+  }, [entityIsLiveNow, monthIsCompleted, snapshotStatus, snapshotKey, entity.slug, selectedMonth, liveComputedRows, liveDataSettled]);
+
+  // liveDataSettled (above) only means "resolved at least once" — already true from the PREVIOUS
+  // load the moment "Update Employee List" is clicked again, before any of the fresh re-fetches
+  // have actually landed. The force-overwrite below needs a signal that's specifically false
+  // *during* a refresh and true again once it completes, which is exactly what each Loading flag
+  // does (unlike the state values themselves, which keep their last value rather than resetting to
+  // null while a re-fetch is in flight). Covers every sub-fetch that has its own Loading flag;
+  // Meal/Recovery for Koenig/Global don't (see EntityPage.tsx's other fetch effects), so those two
+  // specifically could in rare cases still race on a force-overwrite — a real but much smaller gap
+  // than the one this fixes.
+  const nothingLoadingForForceOverwrite = entity.slug === 'koenig'
+    ? !(koenigLoading || koenigAppraisalLoading || koenigLoanLoading || koenigTdsLoading || koenigLeaveLoading || koenigArrearLoading)
+    : entity.slug === 'global'
+      ? !(globalLoading || globalAppraisalLoading || globalLoanLoading || globalTdsLoading || globalArrearLoading)
+      : isOverseasEntity
+        ? !(overseasLoading || overseasAppraisalLoading || overseasLoanLoading || overseasArrearLoading)
+        : true;
+
+  // Force-overwrite an already-frozen snapshot once "Update Employee List" was clicked and the
+  // freshly re-pulled data has finished loading. Without this, "Update Employee List" was silently
+  // a no-op for any month that had already frozen — it genuinely refreshed the server's data, but
+  // rowsForMonth below always prefers snapshotRows over liveComputedRows, so nothing the button did
+  // was ever visible.
+  useEffect(() => {
+    if (!forceSnapshotOverwrite.current) return;
+    if (!entityIsLiveNow || !monthIsCompleted || snapshotStatus !== 'frozen') return;
+    if (liveComputedRows.length === 0 || !nothingLoadingForForceOverwrite) return;
+    forceSnapshotOverwrite.current = false;
+    saveSnapshot(entity.slug, selectedMonth, liveComputedRows, true).then((result) => {
+      if (result.ok) {
+        setSnapshotRows(result.rows);
+        setSnapshotStatus('frozen');
+        snapshotSaveAttempted.current = snapshotKey;
+      }
+    });
+  }, [entityIsLiveNow, monthIsCompleted, snapshotStatus, snapshotKey, entity.slug, selectedMonth, liveComputedRows, nothingLoadingForForceOverwrite]);
 
   // The single binding every line below actually reads: frozen data wins for a completed month
   // once one exists; live-computed data otherwise (current month always, or a completed month's
@@ -1135,13 +1587,16 @@ export default function EntityPage({
     return `ⓘ Showing illustrative sample figures adjusted for ${monthLabel(selectedMonth)}. Only ${monthLabel(BASE_MONTH)} reflects this dashboard's baseline sample data.`;
   }, [isBaseMonth, entity.source, selectedMonth]);
 
-  const whiteCount = rowsForMonth.filter((r) => r.category === 'White').length;
-  const blueCount = rowsForMonth.filter((r) => r.category === 'Blue').length;
-
-  const payoutCurrencies = useMemo(
-    () => entityCurrencies(entity.slug, entity.currency),
-    [entity.slug, entity.currency],
-  );
+  // Derived from the rows actually being displayed (rowsForMonth), not the static
+  // utils/currencies.ts helper — that helper only ever looks at the static sample data in
+  // data/entityRows.json, which is empty/irrelevant for live entities. Confirmed live: Global-DMCC
+  // pays 31 of its 34 employees in USD, not the single AED its entities.ts config implies (2 AED, 1
+  // EUR) — the old static-only lookup always fell back to entity.currency alone, silently hiding
+  // that mix on both this page's "Currency" pill/KPI card and the currency filter chips below.
+  const payoutCurrencies = useMemo(() => {
+    const set = new Set(rowsForMonth.map((r) => r.currency).filter((c): c is string => !!c));
+    return set.size > 0 ? Array.from(set).sort() : [entity.currency];
+  }, [rowsForMonth, entity.currency]);
   const hasMultipleCurrencies = payoutCurrencies.length > 1;
   const currencyCount = (c: string) => rowsForMonth.filter((r) => r.currency === c).length;
 
@@ -1162,6 +1617,31 @@ export default function EntityPage({
     });
   }
 
+  // Global-only removal per explicit request — India-specific statutory columns (PF, ESI, TDS,
+  // NPS, VPF, Professional Tax) and Meal Passes don't apply to Global-DMCC's payroll, so they're
+  // hidden here rather than left showing an always-zero figure. Bank Account No./IFSC Code/Bank
+  // Name/UAN removed per a separate explicit request. Every other entity keeps them.
+  const GLOBAL_HIDDEN_COLS = new Set<keyof PayrollRow>(['pf', 'esi', 'tds', 'nps', 'vpf', 'pt', 'mealpass', 'bankacc', 'ifsc', 'bankname', 'uan']);
+
+  // USA/UK/New Zealand/Australia/Malaysia/Saudi/Canada-only removal per explicit request — Dubai
+  // is NOT included here and keeps every column as before. Covers the same dead ("—") India-
+  // specific/unwired columns as Global's hidden set, plus the salary breakup (Basic/HRA/Other
+  // Allowance/Club-Special Allowance/Salary — Pay Scale itself stays visible) and bank/UAN details.
+  const OVERSEAS_NON_DUBAI_HIDDEN_COLS = new Set<keyof PayrollRow>([
+    'basic', 'hra', 'allowance', 'clubSpecialAllowance', 'gross',
+    'pf', 'esi', 'tds', 'nps', 'arrear', 'vpf', 'tada', 'recovery', 'pt', 'mealpass',
+    'bankacc', 'ifsc', 'bankname', 'uan',
+  ]);
+  const isOverseasNonDubai = isOverseasEntity && entity.slug !== 'dubai';
+
+  // Dubai-only removal per explicit request — same India-specific/unwired columns as the other
+  // overseas entities' hidden set (PF, ESI, TDS, NPS, VPF, Professional Tax, Meal Passes), plus
+  // Overtime/DA, plus Bank Account No./IFSC Code/Bank Name/UAN per a separate explicit request.
+  // Unlike OVERSEAS_NON_DUBAI_HIDDEN_COLS above, this deliberately leaves the salary breakup
+  // (Basic/HRA/Salary), Loan Amount, Appraisal Arrear, TA/DA and Recovery visible on Dubai — only
+  // this specific column set was asked for.
+  const DUBAI_HIDDEN_COLS = new Set<keyof PayrollRow>(['pf', 'esi', 'tds', 'nps', 'overtime', 'da', 'vpf', 'pt', 'mealpass', 'bankacc', 'ifsc', 'bankname', 'uan']);
+
   // Overtime/DA only ever apply to Blue Collar staff (FR-14 / BR-10) — hide them once the
   // current view contains White Collar rows only. WFH Reimbursement is Global-DMCC-only (FR-30 / BR-17).
   const visibleColumns = useMemo(() => {
@@ -1172,26 +1652,30 @@ export default function EntityPage({
       if (entity.slug === 'koenig' && (c.key === 'arrear' || c.key === 'overtime' || c.key === 'da')) return false;
       if ((c.key === 'overtime' || c.key === 'da') && !hasBlueInView) return false;
       if (c.key === 'wfh' && entity.slug !== 'global') return false;
+      if (entity.slug === 'global' && GLOBAL_HIDDEN_COLS.has(c.key)) return false;
+      if (isOverseasNonDubai && OVERSEAS_NON_DUBAI_HIDDEN_COLS.has(c.key)) return false;
+      if (entity.slug === 'dubai' && DUBAI_HIDDEN_COLS.has(c.key)) return false;
       return true;
     });
-  }, [filteredRows, entity.slug]);
+  }, [filteredRows, entity.slug, isOverseasNonDubai]);
 
   const isRayontara = entity.slug === 'rayontara';
   const isKoenig = entity.slug === 'koenig';
   const isGlobal = entity.slug === 'global';
-  const isLiveNow = rayontaraIsLive || koenigIsLive || globalIsLive;
+  const isLiveNow = rayontaraIsLive || koenigIsLive || globalIsLive || overseasIsLive;
 
-  // Koenig/Global's static headcount/active/resigned (see data/entities.ts) is illustrative
-  // sample data — once the live PMS fetch succeeds, the real classified count replaces it so the
-  // KPI cards agree with what the register below actually shows. Koenig/Global specifically never
-  // fall back to that static figure (stale numbers left over from before either entity went live)
-  // even while their first-ever fetch is still in flight — "—" (unknown yet) is more honest than a
-  // number known to be wrong. Every other entity's static figures are accurate for their own
-  // (illustrative) sample data, so they're unaffected.
+  // Koenig/Global/overseas' static headcount/active/resigned (see data/entities.ts) is
+  // illustrative sample data — once the live PMS fetch succeeds, the real classified count
+  // replaces it so the KPI cards agree with what the register below actually shows. These entities
+  // specifically never fall back to that static figure (stale numbers left over from before they
+  // went live) even while their first-ever fetch is still in flight — "—" (unknown yet) is more
+  // honest than a number known to be wrong. Every other entity's static figures are accurate for
+  // their own (illustrative) sample data, so they're unaffected.
   const resignedCount = rowsForMonth.filter((r) => r.salaryHold === 'Yes').length;
-  const kpiHeadcount = isLiveNow ? rowsForMonth.length : (isKoenig || isGlobal) ? undefined : entity.headcount;
-  const kpiActive = isLiveNow ? rowsForMonth.length - resignedCount : (isKoenig || isGlobal) ? undefined : entity.active;
-  const kpiResigned = isLiveNow ? resignedCount : (isKoenig || isGlobal) ? undefined : entity.resigned;
+  const isLiveEntityKind = isKoenig || isGlobal || isOverseasEntity;
+  const kpiHeadcount = isLiveNow ? rowsForMonth.length : isLiveEntityKind ? undefined : entity.headcount;
+  const kpiActive = isLiveNow ? rowsForMonth.length - resignedCount : isLiveEntityKind ? undefined : entity.active;
+  const kpiResigned = isLiveNow ? resignedCount : isLiveEntityKind ? undefined : entity.resigned;
 
   const entTableSub = isLiveNow
     ? `Payroll period: ${monthLabel(selectedMonth)} · ${filteredRows.length} of ${rowsForMonth.length} employees shown — live from the PMS API (financial columns show "—" where the API doesn't provide them; scroll horizontally to see all).`
@@ -1309,9 +1793,52 @@ export default function EntityPage({
                 : globalTdsLoading
                   ? 'ⓘ Fetching TDS from the Employee TDS Details API for matched employees…'
                   : 'TDS reflects this month\'s deducted amount from the Employee TDS Details API for employees with a matched Emp Code.',
+              globalLeaveError
+                ? `⚠ Could not reach the Employee Leave Details API (${globalLeaveError}) — Leave Days shows 0 for matched employees until it's reachable.`
+                : 'Leave Days reflects this month\'s Taken Leaves from the Employee Leave Details API for employees with a matched Emp Code.',
+              globalWfhError
+                ? `⚠ Could not reach the WFH Infra Reimbursement API (${globalWfhError}) — WFH Reimbursement shows 0 for matched employees until it's reachable.`
+                : 'WFH Reimbursement reflects this month\'s approved amount from the WFH Infra Reimbursement API for employees with a matched Emp Code.',
+              globalArrearError
+                ? `⚠ Could not reach the GetLastTwoAppraisals API (${globalArrearError}) — Appraisal Arrear shows 0 for matched employees until it's reachable.`
+                : globalArrearLoading
+                  ? 'ⓘ Fetching Appraisal Arrear from the GetLastTwoAppraisals API for matched employees…'
+                  : 'Appraisal Arrear reflects a salary-change gap (new vs. old salary × pending months) only in the month it was actually processed, for employees with a matched Emp Code.',
             ].filter(Boolean).join(' ')
             : null)
-        : null;
+        : isOverseasEntity
+          ? (overseasLoading ? 'ⓘ Fetching live employee details from the PMS API (Emp Code is recovered by scanning the company\'s code registry the first time — this can take up to a minute)…'
+            : overseasError ? `⚠ Could not reach the PMS API (${overseasError}) — no employee rows to show.`
+            : overseasEmployees
+              ? [
+                '✓ Name, designation, bank details, DOJ, UAN and location are live from the PMS API, classified using its own Is_oversease flag and routed to this entity by FZLLC tag / Payroll Processing Location (see README).',
+                overseasCodeStats
+                  ? `Emp Code is recovered by matching each employee against the company's PMS code registry by full name, and by name + Date of Joining when the name alone is shared by more than one employee — ${overseasCodeStats.matched} of ${overseasCodeStats.total} overseas employees (across all 8 country entities) got a confident, unique match; the rest show "—" because even that couldn't uniquely identify them, so no code can be trusted.`
+                  : '',
+                overseasAppraisalError
+                  ? `⚠ Could not reach the Appraisal API (${overseasAppraisalError}) — Pay Scale and Salary show "—" until it's reachable.`
+                  : overseasAppraisalLoading
+                    ? 'ⓘ Fetching Pay Scale from the Appraisal API for matched employees…'
+                    : 'Pay Scale is live from the Appraisal API for employees with a matched Emp Code (rows without one still show "—", since that API can only be queried by code); Salary is derived from it. PF and ESI don\'t apply overseas, so they stay "—" regardless.',
+                overseasLoanError
+                  ? `⚠ Could not reach the Loan Advance API (${overseasLoanError}) — Loan Amount shows 0 for matched employees until it's reachable.`
+                  : overseasLoanLoading
+                    ? 'ⓘ Fetching Loan Amount from the Loan Advance API for matched employees…'
+                    : 'Loan Amount reflects the current month\'s installment from the Loan Advance API for employees with a matched Emp Code.',
+                overseasArrearError
+                  ? `⚠ Could not reach the GetLastTwoAppraisals API (${overseasArrearError}) — Appraisal Arrear shows 0 for matched employees until it's reachable.`
+                  : overseasArrearLoading
+                    ? 'ⓘ Fetching Appraisal Arrear from the GetLastTwoAppraisals API for matched employees…'
+                    : 'Appraisal Arrear reflects a salary-change gap (new vs. old salary × pending months) only in the month it was actually processed, for employees with a matched Emp Code.',
+                entity.slug === 'dubai'
+                  ? (overseasRecoveryError
+                      ? `⚠ Could not reach the Recovery Panel API (${overseasRecoveryError}) — TA/DA and Recovery show 0 for matched employees until it's reachable.`
+                      : 'TA/DA and Recovery reflect this month\'s deductions from the Recovery Panel API for employees with a matched Emp Code.')
+                  : 'No Recovery integration exists for this entity yet, so TA/DA and Recovery show "—".',
+                'No Meal/TDS/Leave/WFH integration exists for this entity yet, so those columns show "—".',
+              ].filter(Boolean).join(' ')
+              : null)
+          : null;
 
   return (
     <>
@@ -1333,6 +1860,7 @@ export default function EntityPage({
               disabled={koenigLoading}
               onClick={() => {
                 refreshKoenigEmployeeList();
+                forceSnapshotOverwrite.current = true;
                 setKoenigRefreshTrigger((n) => n + 1);
               }}
               title="Re-fetch the employee list, Emp Code matches, and all linked API data from scratch"
@@ -1346,11 +1874,26 @@ export default function EntityPage({
               disabled={globalLoading}
               onClick={() => {
                 refreshGlobalEmployeeList();
+                forceSnapshotOverwrite.current = true;
                 setGlobalRefreshTrigger((n) => n + 1);
               }}
               title="Re-fetch the employee list, Emp Code matches, and all linked API data from scratch"
             >
               {globalLoading ? 'Updating…' : 'Update Employee List'}
+            </button>
+          )}
+          {isOverseasEntity && (
+            <button
+              className="pill-btn"
+              disabled={overseasLoading}
+              onClick={() => {
+                refreshOverseasEmployeeList();
+                forceSnapshotOverwrite.current = true;
+                setOverseasRefreshTrigger((n) => n + 1);
+              }}
+              title="Re-fetch the shared overseas employee list (all 8 country entities) and Emp Code matches from scratch"
+            >
+              {overseasLoading ? 'Updating…' : 'Update Employee List'}
             </button>
           )}
           <button className="pill-btn green" onClick={() => downloadXlsx(entity, filteredRows, visibleColumns)}>Export to Excel</button>
@@ -1360,7 +1903,7 @@ export default function EntityPage({
 
       <div className="kpi-grid">
         <div className="kpi-card"><div className="kpi-num">{fmt(kpiHeadcount)}</div><div className="kpi-label">Total Employees</div></div>
-        <div className="kpi-card"><div className="kpi-num">{entity.currency}</div><div className="kpi-label">Payroll Currency</div></div>
+        <div className="kpi-card"><div className="kpi-num">{payoutCurrencies.join(' / ')}</div><div className="kpi-label">Payroll Currency</div></div>
         <div className="kpi-card"><div className="kpi-num">{fmt(kpiActive)}</div><div className="kpi-label">Active</div></div>
         <div className="kpi-card"><div className="kpi-num">{fmt(kpiResigned)}</div><div className="kpi-label">Resigned</div></div>
       </div>
@@ -1383,8 +1926,6 @@ export default function EntityPage({
             filter={categoryFilter}
             onChange={onCategoryFilterChange}
             allCount={rowsForMonth.length}
-            whiteCount={whiteCount}
-            blueCount={blueCount}
           />
         )}
         {hasMultipleCurrencies && (

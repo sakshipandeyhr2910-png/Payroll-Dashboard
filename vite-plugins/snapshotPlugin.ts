@@ -16,8 +16,15 @@ import path from 'path';
 // to hold), which an in-memory cache would not.
 //
 // Immutability is enforced here, server-side, not trusted to the client: once a file exists for
-// a given entity+month, POST is a no-op that returns the existing content unchanged. First write
-// wins, permanently — there is deliberately no update/delete endpoint.
+// a given entity+month, POST is a no-op that returns the existing content unchanged — UNLESS the
+// request body sets `force: true`, in which case it overwrites. That escape hatch exists
+// specifically for the "Update Employee List" button (see EntityPage.tsx): first-write-wins is the
+// right default for a payroll record nobody's touched, but a user explicitly asking to re-pull
+// live data should actually see it, not silently keep serving whatever happened to be on file the
+// first time this month was ever viewed (which, before this existed, made "Update Employee List"
+// look completely broken — it refreshed the server's data but the frozen snapshot still won every
+// time). There is still no separate update/delete endpoint — force-POST is the only way to change
+// a frozen file, and it's a full overwrite, not a partial edit.
 const SNAPSHOT_DIR = path.resolve(process.cwd(), '.snapshots');
 
 function snapshotPath(entity: string, month: string): string {
@@ -67,9 +74,18 @@ function registerSnapshotMiddleware(server: ViteDevServer | PreviewServer) {
       let body = '';
       req.on('data', (chunk) => { body += chunk; });
       req.on('end', () => {
-        // Already frozen — first write wins. Hand back what's actually on file (not an error) so
-        // the caller can't tell "already frozen" apart from "just froze it" and doesn't need to.
-        if (existsSync(filePath)) {
+        let parsed: { rowsJson?: string; force?: boolean };
+        try {
+          parsed = JSON.parse(body || '{}');
+        } catch {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ ok: false, error: 'Invalid request body' }));
+          return;
+        }
+        // Already frozen — first write wins, unless force:true (see the file-level comment above).
+        // Hand back what's actually on file (not an error) so the caller can't tell "already
+        // frozen" apart from "just froze it" and doesn't need to.
+        if (existsSync(filePath) && !parsed.force) {
           try {
             const rowsJson = readFileSync(filePath, 'utf8');
             res.statusCode = 200;
@@ -78,14 +94,6 @@ function registerSnapshotMiddleware(server: ViteDevServer | PreviewServer) {
             res.statusCode = 500;
             res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : 'Read failed' }));
           }
-          return;
-        }
-        let parsed: { rowsJson?: string };
-        try {
-          parsed = JSON.parse(body || '{}');
-        } catch {
-          res.statusCode = 400;
-          res.end(JSON.stringify({ ok: false, error: 'Invalid request body' }));
           return;
         }
         if (typeof parsed.rowsJson !== 'string' || parsed.rowsJson.length === 0) {

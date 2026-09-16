@@ -171,12 +171,13 @@ async function main() {
   const codeCount = Object.keys(serialized.codeDetails).length;
   console.log(`Scan complete: ${codeCount} codes matched to a name. Writing to KV...`);
 
-  // Written to both keys — see api/_lib/codeUniverseMatch.ts's SerializedCodeUniverse comment:
-  // Koenig and Global currently share one underlying scan (the matching logic just filters which
-  // employees to apply it to), but each entity page reads its own KV key so they can diverge
-  // later without a script/schema change.
+  // Written to all three keys — see api/_lib/codeUniverseMatch.ts's SerializedCodeUniverse
+  // comment: Koenig, Global and Overseas currently share one underlying scan (the matching logic
+  // just filters which employees to apply it to), but each entity page reads its own KV key so
+  // they can diverge later without a script/schema change.
   await kv.set('codeUniverse:koenig', serialized);
   await kv.set('codeUniverse:global', serialized);
+  await kv.set('codeUniverse:overseas', serialized);
 
   console.log('Done.');
 }

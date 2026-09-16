@@ -39,6 +39,9 @@ export interface PmsEmployee {
   // Confirmed live: unlike the Is_* flags (all strings), this comes through as a raw JSON number.
   working_days: string | number | null;
   Is_blue_collared_job: string | null;
+  // Overseas (Is_oversease=true) entity-routing fields — see fetchAllOverseasEmployees below.
+  golabl_type: string | null;
+  payroll_processing_location: string | null;
 }
 
 // The PMS "common" endpoint's response schema has no employee-code field at all (confirmed
@@ -453,6 +456,35 @@ async function fetchGlobalEmployeesWithCodes(creds: PmsCredentials): Promise<Koe
   return employees.map((e) => ({ ...e, code: matchEmployeeCode(e, universe) }));
 }
 
+// Overseas = Is_oversease=true, independent of Is_global (confirmed live: these are two disjoint
+// populations — nobody is flagged both). This is a small, separate group of employees whose
+// Payroll Processing Location determines which country-specific dashboard entity (Dubai, USA, UK,
+// New Zealand, Australia, Malaysia, Saudi, Canada) they belong under — see
+// src/utils/overseasEntityMapping.ts for the routing rules. Global-flagged employees are excluded
+// here on principle (same as fetchAllKoenigEmployees) even though live data shows no overlap.
+async function fetchAllOverseasEmployees(creds: PmsCredentials, token: TokenState): Promise<PmsEmployeeRaw[]> {
+  const all = await fetchAllEmployeesBulk(creds, token);
+  return all.filter((e) => toBool(e.Is_oversease) && !toBool(e.Is_global));
+}
+
+async function fetchOverseasEmployees(creds: PmsCredentials): Promise<PmsEmployeeRaw[]> {
+  if (!cachedToken) cachedToken = await fetchToken(creds);
+  try {
+    return await fetchAllOverseasEmployees(creds, cachedToken);
+  } catch {
+    cachedToken = await fetchToken(creds);
+    return await fetchAllOverseasEmployees(creds, cachedToken);
+  }
+}
+
+async function fetchOverseasEmployeesWithCodes(creds: PmsCredentials): Promise<KoenigEmployeeWithCode[]> {
+  const [employees, universe] = await Promise.all([
+    fetchOverseasEmployees(creds),
+    getCodeUniverse(creds),
+  ]);
+  return employees.map((e) => ({ ...e, code: matchEmployeeCode(e, universe) }));
+}
+
 function registerMiddleware(server: ViteDevServer | PreviewServer, creds: PmsCredentials) {
   server.middlewares.use('/api/rayontara/employees', (_req, res) => {
     res.setHeader('Content-Type', 'application/json');
@@ -522,6 +554,29 @@ function registerGlobalMiddleware(server: ViteDevServer | PreviewServer, creds: 
   });
 }
 
+function registerOverseasMiddleware(server: ViteDevServer | PreviewServer, creds: PmsCredentials) {
+  server.middlewares.use('/api/overseas/employees', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    // Same reasoning as the Koenig/Global handlers above — Overseas also matches codes via the
+    // shared, permanently-cached getCodeUniverse() scan.
+    const forceRefresh = new URL(req.url || '', 'http://localhost').searchParams.get('refresh') === 'true';
+    if (forceRefresh) cachedCodeUniverse = null;
+    fetchOverseasEmployeesWithCodes(creds)
+      .then((employees) => {
+        const matched = employees.filter((e) => e.code !== null).length;
+        res.statusCode = 200;
+        res.end(JSON.stringify({ ok: true, employees, matched, total: employees.length }));
+      })
+      .catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error('[overseas-pms-api]', err);
+        res.statusCode = 502;
+        const message = err instanceof Error ? err.message : 'Unknown error contacting PMS API';
+        res.end(JSON.stringify({ ok: false, error: message }));
+      });
+  });
+}
+
 export function rayontaraApiPlugin(creds: PmsCredentials): Plugin {
   return {
     name: 'rayontara-pms-api',
@@ -529,11 +584,13 @@ export function rayontaraApiPlugin(creds: PmsCredentials): Plugin {
       registerMiddleware(server, creds);
       registerKoenigMiddleware(server, creds);
       registerGlobalMiddleware(server, creds);
+      registerOverseasMiddleware(server, creds);
     },
     configurePreviewServer(server) {
       registerMiddleware(server, creds);
       registerKoenigMiddleware(server, creds);
       registerGlobalMiddleware(server, creds);
+      registerOverseasMiddleware(server, creds);
     },
   };
 }

@@ -13,8 +13,8 @@ export const ENTITIES: Entity[] = [
   },
   {
     slug: 'dubai', name: 'Dubai', full: 'Dubai-FZLLC', currency: 'AED',
-    headcount: 210, white: 210, blue: 0, active: 198, resigned: 9, terminated: 3, source: 'sample',
-    notes: '<b>Dubai-FZLLC</b> is a UAE free-zone entity. India-specific statutory deductions (EPF, ESI, PT) do not apply. Net payable is computed and disbursed in AED (FR-33). The Payroll Register below shows a sample of 6 of 210 employees.',
+    headcount: 0, white: 0, blue: 0, active: 0, resigned: 0, terminated: 0, source: 'sample',
+    notes: '<b>Dubai-FZLLC</b> is a UAE free-zone entity. India-specific statutory deductions (EPF, ESI, PT) do not apply. Net payable is computed and disbursed in AED (FR-33). The Payroll Register below is built live from the PMS employee-master API — every employee whose entity/tag is FZLLC, or whose Payroll Processing Location resolves to a UAE city, is shown here (see README\'s "Overseas employee routing" section). Pay Scale (and the Salary derived from it) is also live from the Appraisal API.',
   },
   {
     slug: 'global', name: 'Global', full: 'Global-DMCC', currency: 'AED',
@@ -24,37 +24,37 @@ export const ENTITIES: Entity[] = [
   {
     slug: 'usa', name: 'USA', full: 'USA', currency: 'USD',
     headcount: 65, white: 65, blue: 0, active: 61, resigned: 3, terminated: 1, source: 'sample',
-    notes: 'Net payable for <b>USA</b> is computed and disbursed in USD (FR-33). India-specific statutory deductions do not apply. The Payroll Register below shows a sample of 4 of 65 employees.',
+    notes: 'Net payable for <b>USA</b> is computed and disbursed in USD (FR-33). India-specific statutory deductions do not apply. The Payroll Register below is built live from the PMS employee-master API, showing overseas employees whose Payroll Processing Location resolves to a US city, with Pay Scale (and the Salary derived from it) also live from the Appraisal API.',
   },
   {
     slug: 'uk', name: 'UK', full: 'London', currency: 'GBP',
     headcount: 55, white: 55, blue: 0, active: 52, resigned: 2, terminated: 1, source: 'sample',
-    notes: 'Net payable for <b>UK (London)</b> is computed and disbursed in GBP (FR-33). India-specific statutory deductions do not apply. The Payroll Register below shows a sample of 4 of 55 employees.',
+    notes: 'Net payable for <b>UK (London)</b> is computed and disbursed in GBP (FR-33). India-specific statutory deductions do not apply. The Payroll Register below is built live from the PMS employee-master API, showing overseas employees whose Payroll Processing Location resolves to a UK city, with Pay Scale (and the Salary derived from it) also live from the Appraisal API.',
   },
   {
     slug: 'newzealand', name: 'New Zealand', full: 'New Zealand', currency: 'NZD',
     headcount: 30, white: 30, blue: 0, active: 28, resigned: 1, terminated: 1, source: 'sample',
-    notes: 'Net payable for <b>New Zealand</b> is computed and disbursed in NZD (FR-33). India-specific statutory deductions do not apply. The Payroll Register below shows a sample of 3 of 30 employees.',
+    notes: 'Net payable for <b>New Zealand</b> is computed and disbursed in NZD (FR-33). India-specific statutory deductions do not apply. The Payroll Register below is built live from the PMS employee-master API, showing overseas employees whose Payroll Processing Location resolves to a New Zealand city, with Pay Scale (and the Salary derived from it) also live from the Appraisal API.',
   },
   {
     slug: 'australia', name: 'Australia', full: 'Australia', currency: 'AUD',
     headcount: 45, white: 45, blue: 0, active: 42, resigned: 2, terminated: 1, source: 'sample',
-    notes: 'Net payable for <b>Australia</b> is computed and disbursed in AUD (FR-33). India-specific statutory deductions do not apply. The Payroll Register below shows a sample of 4 of 45 employees.',
+    notes: 'Net payable for <b>Australia</b> is computed and disbursed in AUD (FR-33). India-specific statutory deductions do not apply. The Payroll Register below is built live from the PMS employee-master API, showing overseas employees whose Payroll Processing Location resolves to an Australian city, with Pay Scale (and the Salary derived from it) also live from the Appraisal API.',
   },
   {
     slug: 'malaysia', name: 'Malaysia', full: 'Malaysia', currency: 'MYR',
     headcount: 75, white: 75, blue: 0, active: 70, resigned: 3, terminated: 2, source: 'sample',
-    notes: 'Net payable for <b>Malaysia</b> is computed and disbursed in MYR (FR-33). India-specific statutory deductions do not apply. The Payroll Register below shows a sample of 4 of 75 employees.',
+    notes: 'Net payable for <b>Malaysia</b> is computed and disbursed in MYR (FR-33). India-specific statutory deductions do not apply. The Payroll Register below is built live from the PMS employee-master API, showing overseas employees whose Payroll Processing Location resolves to a Malaysian city, with Pay Scale (and the Salary derived from it) also live from the Appraisal API.',
   },
   {
     slug: 'saudi', name: 'Saudi', full: 'Saudi Arabia', currency: 'SAR',
     headcount: 85, white: 85, blue: 0, active: 80, resigned: 3, terminated: 2, source: 'sample',
-    notes: 'Net payable for <b>Saudi Arabia</b> is computed and disbursed in SAR (FR-33). India-specific statutory deductions do not apply. The Payroll Register below shows a sample of 4 of 85 employees.',
+    notes: 'Net payable for <b>Saudi Arabia</b> is computed and disbursed in SAR (FR-33). India-specific statutory deductions do not apply. The Payroll Register below is built live from the PMS employee-master API, showing overseas employees whose Payroll Processing Location resolves to a Saudi city, with Pay Scale (and the Salary derived from it) also live from the Appraisal API.',
   },
   {
     slug: 'canada', name: 'Canada', full: 'Canada', currency: 'CAD',
     headcount: 40, white: 40, blue: 0, active: 37, resigned: 2, terminated: 1, source: 'sample',
-    notes: 'Net payable for <b>Canada</b> is computed and disbursed in CAD (FR-33). India-specific statutory deductions do not apply. The Payroll Register below shows a sample of 4 of 40 employees.',
+    notes: 'Net payable for <b>Canada</b> is computed and disbursed in CAD (FR-33). India-specific statutory deductions do not apply. The Payroll Register below is built live from the PMS employee-master API, showing overseas employees whose Payroll Processing Location resolves to a Canadian city, with Pay Scale (and the Salary derived from it) also live from the Appraisal API.',
   },
 ];
 
