@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth';
-import { RAYONTARA_EMP_CODES } from '../_lib/rayontaraEmpCodes';
-import { fetchTdsForCodesWithRetry, type TdsCredentials } from '../_lib/tdsClient';
+import { requireAuth } from '../auth';
+import { RAYONTARA_EMP_CODES } from '../rayontaraEmpCodes';
+import { fetchTdsForCodesWithRetry, type TdsCredentials } from '../tdsClient';
 
 function credsFromEnv(): TdsCredentials {
   return {

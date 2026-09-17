@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth';
-import { withCachedToken } from '../_lib/tokenCache';
-import { RAYONTARA_EMP_CODES } from '../_lib/rayontaraEmpCodes';
-import { fetchEmployeeByCode, fetchToken, toBool, type PmsCredentials, type PmsEmployee } from '../_lib/pmsClient';
+import { requireAuth } from '../auth';
+import { withCachedToken } from '../tokenCache';
+import { RAYONTARA_EMP_CODES } from '../rayontaraEmpCodes';
+import { fetchEmployeeByCode, fetchToken, toBool, type PmsCredentials, type PmsEmployee } from '../pmsClient';
 
 // Ported from vite-plugins/rayontaraApiPlugin.ts's '/api/rayontara/employees' handler.
 

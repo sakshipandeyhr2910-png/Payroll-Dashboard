@@ -1,21 +1,20 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth';
-import { readJsonBody } from '../_lib/readBody';
-import { fetchRecoveryForCodesWithRetry, type RecoveryCredentials } from '../_lib/recoveryClient';
+import { requireAuth } from '../auth';
+import { readJsonBody } from '../readBody';
+import { fetchLeaveForCodesWithRetry, type LeaveCredentials } from '../leaveClient';
 
-function credsFromEnv(): RecoveryCredentials {
+function credsFromEnv(): LeaveCredentials {
   return {
-    base: process.env.RECOVERY_API_BASE || '',
-    username: process.env.RECOVERY_USERNAME || '',
-    password: process.env.RECOVERY_PASSWORD || '',
-    role: process.env.RECOVERY_ROLE || '',
-    apiKey: process.env.RECOVERY_API_KEY || '',
+    base: process.env.LEAVE_API_BASE || '',
+    username: process.env.LEAVE_USERNAME || '',
+    password: process.env.LEAVE_PASSWORD || '',
+    role: process.env.LEAVE_ROLE || '',
+    apiKey: process.env.LEAVE_API_KEY || '',
   };
 }
 
-// Ported from vite-plugins/rayontaraRecoveryApiPlugin.ts's '/api/koenig/recovery' handler.
-// Koenig's (and Global's) codes are only known client-side, so they're sent up in the request
-// body along with the month.
+// Ported from vite-plugins/rayontaraLeaveApiPlugin.ts's '/api/koenig/leave' handler. Koenig's
+// codes are only known client-side, so they're sent up in the request body along with the month.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const auth = await requireAuth(req);
   if (!auth.ok) {
@@ -42,11 +41,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const records = await fetchRecoveryForCodesWithRetry(credsFromEnv(), codes, selectedMonth);
+    const records = await fetchLeaveForCodesWithRetry(credsFromEnv(), codes, selectedMonth);
     res.status(200).json({ ok: true, records });
   } catch (err) {
-    console.error('[koenig-recovery-api]', err);
-    const message = err instanceof Error ? err.message : 'Unknown error contacting Employee Recovery Details API';
+    console.error('[koenig-leave-api]', err);
+    const message = err instanceof Error ? err.message : 'Unknown error contacting Employee Leave Details API';
     res.status(502).json({ ok: false, error: message });
   }
 }

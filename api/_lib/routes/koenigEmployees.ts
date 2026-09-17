@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth';
-import { kv } from '../_lib/kv';
-import { refreshCachedToken, withCachedToken } from '../_lib/tokenCache';
-import { fetchAllKoenigEmployees, fetchToken, type PmsCredentials, type PmsEmployeeRaw } from '../_lib/pmsClient';
-import { matchEmployeeCode, type SerializedCodeUniverse } from '../_lib/codeUniverseMatch';
+import { requireAuth } from '../auth';
+import { kv } from '../kv';
+import { refreshCachedToken, withCachedToken } from '../tokenCache';
+import { fetchAllKoenigEmployees, fetchToken, type PmsCredentials, type PmsEmployeeRaw } from '../pmsClient';
+import { matchEmployeeCode, type SerializedCodeUniverse } from '../codeUniverseMatch';
 
 // Ported from vite-plugins/rayontaraApiPlugin.ts's '/api/koenig/employees' handler.
 //

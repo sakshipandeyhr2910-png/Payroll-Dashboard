@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth';
-import { RAYONTARA_EMP_CODES } from '../_lib/rayontaraEmpCodes';
-import { fetchArrearForCodesWithRetry, type ArrearCredentials } from '../_lib/arrearClient';
-import { safeVerifyKoenigDecryption } from '../_lib/koenigDecryption';
+import { requireAuth } from '../auth';
+import { RAYONTARA_EMP_CODES } from '../rayontaraEmpCodes';
+import { fetchArrearForCodesWithRetry, type ArrearCredentials } from '../arrearClient';
+import { safeVerifyKoenigDecryption } from '../koenigDecryption';
 
 function credsFromEnv(): ArrearCredentials {
   return {

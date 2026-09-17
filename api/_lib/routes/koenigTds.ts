@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth';
-import { readJsonBody } from '../_lib/readBody';
-import { fetchTdsForCodesWithRetry, type TdsCredentials } from '../_lib/tdsClient';
+import { requireAuth } from '../auth';
+import { readJsonBody } from '../readBody';
+import { fetchTdsForCodesWithRetry, type TdsCredentials } from '../tdsClient';
 
 function credsFromEnv(): TdsCredentials {
   return {

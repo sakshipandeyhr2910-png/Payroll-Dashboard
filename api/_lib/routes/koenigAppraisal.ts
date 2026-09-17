@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth';
-import { readJsonBody } from '../_lib/readBody';
-import { fetchAppraisalForCodesWithRetry, type AppraisalCredentials } from '../_lib/appraisalClient';
-import { safeVerifyKoenigDecryption } from '../_lib/koenigDecryption';
+import { requireAuth } from '../auth';
+import { readJsonBody } from '../readBody';
+import { fetchAppraisalForCodesWithRetry, type AppraisalCredentials } from '../appraisalClient';
+import { safeVerifyKoenigDecryption } from '../koenigDecryption';
 
 function credsFromEnv(): AppraisalCredentials {
   return {

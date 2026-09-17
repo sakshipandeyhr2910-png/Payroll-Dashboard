@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomBytes } from 'crypto';
-import { signSessionToken } from '../_lib/auth';
-import { readJsonBody } from '../_lib/readBody';
+import { signSessionToken } from '../auth';
+import { readJsonBody } from '../readBody';
 
 // Ported from vite-plugins/dashboardAuthPlugin.ts's '/api/auth/login' handler. Same single shared
 // login for the whole dashboard (not per-user accounts) — still validated against

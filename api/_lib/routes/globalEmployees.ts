@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth';
-import { kv } from '../_lib/kv';
-import { refreshCachedToken, withCachedToken } from '../_lib/tokenCache';
-import { fetchAllGlobalEmployees, fetchToken, type PmsCredentials, type PmsEmployeeRaw } from '../_lib/pmsClient';
-import { matchEmployeeCode, type SerializedCodeUniverse } from '../_lib/codeUniverseMatch';
+import { requireAuth } from '../auth';
+import { kv } from '../kv';
+import { refreshCachedToken, withCachedToken } from '../tokenCache';
+import { fetchAllGlobalEmployees, fetchToken, type PmsCredentials, type PmsEmployeeRaw } from '../pmsClient';
+import { matchEmployeeCode, type SerializedCodeUniverse } from '../codeUniverseMatch';
 
 // Ported from vite-plugins/rayontaraApiPlugin.ts's '/api/global/employees' handler — same PMS
 // credentials/token cache and bulk endpoint as Koenig/Rayontara, filtered to Is_global=true

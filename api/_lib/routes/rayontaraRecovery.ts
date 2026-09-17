@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth';
-import { RAYONTARA_EMP_CODES } from '../_lib/rayontaraEmpCodes';
-import { fetchRecoveryForCodesWithRetry, type RecoveryCredentials } from '../_lib/recoveryClient';
+import { requireAuth } from '../auth';
+import { RAYONTARA_EMP_CODES } from '../rayontaraEmpCodes';
+import { fetchRecoveryForCodesWithRetry, type RecoveryCredentials } from '../recoveryClient';
 
 function credsFromEnv(): RecoveryCredentials {
   return {
