@@ -40,6 +40,18 @@ import CategoryChips from './CategoryChips';
 import CurrencyChips, { type CurrencyFilterValue } from './CurrencyChips';
 import PayrollTable from './PayrollTable';
 
+// Explicit per-employee entity override, same "confirmed exception, not a policy change" reasoning
+// as CURRENCY_CORRECTIONS in koenigLiveRows.ts. Imran Sheikh (3287) is Global population in PMS
+// (Is_global=true, city Berlin) and was deliberately left there earlier when live location data
+// contradicted a Dubai claim — but per explicit confirmation he actually processes under Dubai
+// (consistent with his Appraisal record's currency also having been wrong, already corrected
+// separately). His row is pulled out of Global and appended to Dubai specifically; no other
+// overseas/Global employee is affected, and PMS-driven routing (classifyOverseasEmployee) is
+// unchanged.
+const EMPLOYEE_ENTITY_OVERRIDE: Record<number, string> = {
+  3287: 'dubai',
+};
+
 interface Props {
   entity: Entity;
   categoryFilter: CategoryFilter;
@@ -598,7 +610,9 @@ export default function EntityPage({
   );
 
   useEffect(() => {
-    if (entity.slug !== 'global') return;
+    // Also fetched on the Dubai tab: EMPLOYEE_ENTITY_OVERRIDE needs Imran Sheikh's (3287) master
+    // record, which only exists in the Global population, to render his row there.
+    if (entity.slug !== 'global' && entity.slug !== 'dubai') return;
     // Always refetches from the backend on every visit — see the Koenig effect above for why the
     // cache-based "skip if already fetched" shortcut was removed.
     let cancelled = false;
@@ -630,7 +644,8 @@ export default function EntityPage({
   const [globalAppraisalError, setGlobalAppraisalError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (entity.slug !== 'global' || !globalEmployees) return;
+    // Also needed on Dubai — see EMPLOYEE_ENTITY_OVERRIDE (Imran Sheikh's Pay Scale/currency).
+    if ((entity.slug !== 'global' && entity.slug !== 'dubai') || !globalEmployees) return;
     if (globalCache.appraisal !== null) {
       setGlobalAppraisal(globalCache.appraisal);
       setGlobalAppraisalError(null);
@@ -669,7 +684,8 @@ export default function EntityPage({
   const [globalLoanError, setGlobalLoanError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (entity.slug !== 'global' || !globalEmployees) return;
+    // Also needed on Dubai — see EMPLOYEE_ENTITY_OVERRIDE (Imran Sheikh's Loan Amount).
+    if ((entity.slug !== 'global' && entity.slug !== 'dubai') || !globalEmployees) return;
     if (globalCache.loans !== null) {
       setGlobalLoans(globalCache.loans);
       setGlobalLoanError(null);
@@ -778,7 +794,8 @@ export default function EntityPage({
   const [globalRecoveryError, setGlobalRecoveryError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (entity.slug !== 'global' || !globalEmployees) return;
+    // Also needed on Dubai — see EMPLOYEE_ENTITY_OVERRIDE (Imran Sheikh's TA-DA/Recovery).
+    if ((entity.slug !== 'global' && entity.slug !== 'dubai') || !globalEmployees) return;
     const cached = globalCache.recoveryByMonth.get(selectedMonth);
     if (cached !== undefined) {
       setGlobalRecovery(cached);
@@ -889,7 +906,8 @@ export default function EntityPage({
   const [globalArrearError, setGlobalArrearError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (entity.slug !== 'global' || !globalEmployees) return;
+    // Also needed on Dubai — see EMPLOYEE_ENTITY_OVERRIDE (Imran Sheikh's Appraisal Arrear).
+    if ((entity.slug !== 'global' && entity.slug !== 'dubai') || !globalEmployees) return;
     if (globalCache.arrear !== null) {
       setGlobalArrear(globalCache.arrear);
       setGlobalArrearError(null);
@@ -1190,10 +1208,12 @@ export default function EntityPage({
     return map;
   }, [liveLeave, koenigLeave, globalLeave]);
 
-  // WFH Infra Reimbursement is Global-DMCC-only — no Koenig/Rayontara source.
+  // WFH Infra Reimbursement is Global-DMCC-only — no Koenig/Rayontara source. `remarks` carries the
+  // API's own Accessories text (e.g. "Internet and landline", "Chat GPT" — what was actually
+  // claimed), shown in the Payroll Register's Remarks column alongside the amount.
   const wfhByCode = useMemo(() => {
-    const map = new Map<number, number>();
-    (globalWfh || []).forEach((r) => map.set(r.code, r.wfhAmount));
+    const map = new Map<number, { amount: number; remarks: string }>();
+    (globalWfh || []).forEach((r) => map.set(r.code, { amount: r.wfhAmount, remarks: r.remarks }));
     return map;
   }, [globalWfh]);
 
@@ -1205,10 +1225,20 @@ export default function EntityPage({
       return koenigEmployees ? buildKoenigLiveRows(koenigEmployees, appraisalByCode, entity.currency) : staticRows;
     }
     if (entity.slug === 'global') {
-      return globalEmployees ? buildKoenigLiveRows(globalEmployees, appraisalByCode, entity.currency) : staticRows;
+      if (!globalEmployees) return staticRows;
+      const rows = buildKoenigLiveRows(globalEmployees, appraisalByCode, entity.currency);
+      // Imran Sheikh (3287) is pulled out — see EMPLOYEE_ENTITY_OVERRIDE, shown under Dubai instead.
+      return rows.filter((r) => EMPLOYEE_ENTITY_OVERRIDE[r.code] === undefined);
     }
     if (isOverseasEntity) {
-      return overseasEmployeesForEntity ? buildOverseasLiveRows(overseasEmployeesForEntity, entity.currency, appraisalByCode) : staticRows;
+      if (!overseasEmployeesForEntity) return staticRows;
+      const rows = buildOverseasLiveRows(overseasEmployeesForEntity, entity.currency, appraisalByCode);
+      if (entity.slug === 'dubai' && globalEmployees) {
+        const overrideRows = buildKoenigLiveRows(globalEmployees, appraisalByCode, entity.currency)
+          .filter((r) => EMPLOYEE_ENTITY_OVERRIDE[r.code] === 'dubai');
+        return [...rows, ...overrideRows];
+      }
+      return rows;
     }
     return staticRows;
   }, [entity.slug, entity.currency, staticRows, liveEmployees, appraisalByCode, koenigEmployees, globalEmployees, isOverseasEntity, overseasEmployeesForEntity]);
@@ -1326,9 +1356,21 @@ export default function EntityPage({
       const vpf = hasRealCodeForRecovery ? (recoveryRecord?.vpf ?? 0) : isRecoveryScopedEntity ? NaN : r.vpf;
       const tada = hasRealCodeForRecovery ? (recoveryRecord?.tada ?? 0) : isRecoveryScopedEntity ? NaN : r.tada;
       const recovery = hasRealCodeForRecovery ? (recoveryRecord?.recovery ?? 0) : isRecoveryScopedEntity ? NaN : r.recovery;
-      const remarks = hasRealCodeForRecovery && recoveryRecord?.remarks
-        ? [r.remarks, recoveryRecord.remarks].filter(Boolean).join(' | ')
-        : r.remarks;
+      // WFH Infra Reimbursement is Global-DMCC-only (FR-30 / BR-17), from the WFH_Infra_Reimbursement
+      // API (api_key 17), matched by Emp Code (the API's own `RequestedBy` field) and the selected
+      // month via each request's Request Date — same "known zero, not unknown" reasoning as
+      // Loan/Meal/Recovery/TDS above: no approved reimbursement on file for this employee this month
+      // is a real, known 0, not an unknown. Every other entity keeps its existing WFH Reimbursement
+      // figure (sample entities have a static value; Koenig/Rayontara have none, so it stays NaN —
+      // see koenigLiveRows.ts/rayontaraLiveRows.ts). Its Accessories text (what was actually
+      // claimed, e.g. "Internet and landline") is folded into Remarks below, not a separate column.
+      const isWfhScopedEntity = entity.slug === 'global';
+      const wfhRecord = isWfhScopedEntity && hasRealCode ? wfhByCode.get(r.code) : undefined;
+      const remarks = [
+        r.remarks,
+        hasRealCodeForRecovery ? recoveryRecord?.remarks : undefined,
+        wfhRecord?.remarks,
+      ].filter(Boolean).join(' | ');
       const tds = hasRealCode ? (tdsByCode.get(r.code) ?? 0) : isRealCodeEntity ? NaN : r.tds;
       // Leave Days is scoped to Koenig, Rayontara and Global — Taken Leaves from the Employee
       // Leave Details API, matched by Emp Code and the selected month. "No leave record for this
@@ -1347,15 +1389,8 @@ export default function EntityPage({
         ? (hasRealCodeForLoan ? appraisalArrearForMonth(arrearByCode.get(r.code), selectedMonth) : NaN)
         : r.appraisalArrear;
       const pt = professionalTaxForLocation(r.location);
-      // WFH Infra Reimbursement is Global-DMCC-only (FR-30 / BR-17), from the WFH_Infra_Reimbursement
-      // API (api_key 17), matched by Emp Code and the selected month — same "known zero, not
-      // unknown" reasoning as Loan/Meal/Recovery/TDS above: no approved reimbursement on file for
-      // this employee this month is a real, known 0, not an unknown. Every other entity keeps its
-      // existing WFH Reimbursement figure (sample entities have a static value; Koenig/Rayontara
-      // have none, so it stays NaN — see koenigLiveRows.ts/rayontaraLiveRows.ts).
-      const isWfhScopedEntity = entity.slug === 'global';
       const wfh = isWfhScopedEntity
-        ? (hasRealCode ? (wfhByCode.get(r.code) ?? 0) : NaN)
+        ? (hasRealCode ? (wfhRecord?.amount ?? 0) : NaN)
         : r.wfh;
       // Net Payable = Salary − (PF + ESI + Loan + TDS + NPS) + (Arrear + Overtime)
       //             − (DA + VPF + TA/DA + Recovery + Professional Tax) + Appraisal Arrear − Meal Passes
@@ -1496,7 +1531,15 @@ export default function EntityPage({
             && (overseasAppraisal !== null || overseasAppraisalError !== null)
             && (overseasLoans !== null || overseasLoanError !== null)
             && (overseasArrear !== null || overseasArrearError !== null)
-            && (overseasRecovery !== null || overseasRecoveryError !== null))
+            && (overseasRecovery !== null || overseasRecoveryError !== null)
+            // Dubai also pulls Global's data for EMPLOYEE_ENTITY_OVERRIDE (Imran Sheikh, 3287) —
+            // must settle too, or Dubai could freeze his row before Pay Scale/Loan/Arrear load.
+            && (entity.slug !== 'dubai'
+              || ((globalEmployees !== null || globalError !== null)
+                && (globalAppraisal !== null || globalAppraisalError !== null)
+                && (globalLoans !== null || globalLoanError !== null)
+                && (globalArrear !== null || globalArrearError !== null)
+                && (globalRecovery !== null || globalRecoveryError !== null))))
           : true; // sample entities never take this path — entityIsLiveNow is false for them
 
   useEffect(() => {
@@ -1553,6 +1596,7 @@ export default function EntityPage({
       ? !(globalLoading || globalAppraisalLoading || globalLoanLoading || globalTdsLoading || globalArrearLoading)
       : isOverseasEntity
         ? !(overseasLoading || overseasAppraisalLoading || overseasLoanLoading || overseasArrearLoading)
+          && (entity.slug !== 'dubai' || !(globalLoading || globalAppraisalLoading || globalLoanLoading || globalArrearLoading))
         : true;
 
   // Force-overwrite an already-frozen snapshot once "Update Employee List" was clicked and the
@@ -1890,6 +1934,13 @@ export default function EntityPage({
                 refreshOverseasEmployeeList();
                 forceSnapshotOverwrite.current = true;
                 setOverseasRefreshTrigger((n) => n + 1);
+                // Dubai also needs a fresh Global re-fetch — see EMPLOYEE_ENTITY_OVERRIDE
+                // (Imran Sheikh, 3287), whose master/Appraisal/Loan/Arrear/Recovery data all come
+                // from the Global population, not the overseas one.
+                if (entity.slug === 'dubai') {
+                  refreshGlobalEmployeeList();
+                  setGlobalRefreshTrigger((n) => n + 1);
+                }
               }}
               title="Re-fetch the shared overseas employee list (all 8 country entities) and Emp Code matches from scratch"
             >

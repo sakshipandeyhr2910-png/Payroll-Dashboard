@@ -11,6 +11,7 @@ export interface WfhCredentials {
 export interface WfhReimbursementRecord {
   code: number;
   wfhAmount: number;
+  remarks: string;
 }
 
 interface TokenState {
@@ -24,25 +25,31 @@ interface GetTokenResponse {
   content: { accessToken: string; deviceToken: string; Username: string; Role: string } | null;
 }
 
-// UNCONFIRMED response shape: live-tested during integration (token exchange succeeds, HTTP 200,
-// statuscode 200) but every filter combination tried (blank, ALL/Is1 set, a wide
-// RequestedDateFrom/To range, a specific known EmpId) returned an empty result — apparently no WFH
-// Infra Reimbursement request has actually been submitted/approved company-wide yet, so there was
-// no populated record to confirm real field names against (unlike every other integration in this
-// codebase, which has a "confirmed live" comment because a real response was inspected). Field
-// names below are a best-effort guess from the request payload's own naming (EmpId, not EmpCode —
-// this is the one Kites endpoint that spells it differently) plus the common "Amount" convention
-// used elsewhere. parseContent logs any record that doesn't match a guessed key so a real
-// response, whenever one exists, immediately shows the actual shape in the server console instead
-// of silently dropping it — check that log first if this column stays at 0 once a real WFH request
-// exists.
+// CONFIRMED LIVE on 2026-09-17 — the earlier "always empty" result wasn't a data-availability gap,
+// it was this request sending the wrong flags: `excludeZero` and `IsAR` must be `"1"` (blank
+// silently returns zero rows, no error) and `Option` must be `"All"` (blank/"Pending" only surfaces
+// requests still awaiting approval, which is why per-EmpId probing during integration kept coming
+// back empty even for employees who turned out to have approved claims). Confirmed real records,
+// e.g. `{"RequestedBy":3595,"Employee Name":"Elvis Bessah","Accessories":"Internet and
+// landline","RequestDate":"2026-08-21","cost":36.00,"IsApproved":1,...}` — so the employee/code
+// field is `RequestedBy` (not `EmpId`/`EmpCode`), the amount field is `cost` (lowercase), and there's
+// a separate `Accessories` field (what was bought/claimed, e.g. "Internet and landline", "Chat
+// GPT") that's surfaced in the Payroll Register's Remarks column, not the reimbursement amount.
 interface WfhReimbursementRaw {
+  RequestedBy?: number | string | null;
   EmpId?: number | string | null;
   EmpCode?: number | string | null;
+  RequestDate?: string | null;
+  RequestedDate?: string | null;
+  cost?: number | string | null;
+  CostAmount?: number | string | null;
   Amount?: number | string | null;
   ApprovedAmount?: number | string | null;
   ReimbursementAmount?: number | string | null;
   TotalAmount?: number | string | null;
+  Accessories?: string | null;
+  IsApproved?: number | string | null;
+  IsDisapproved?: number | string | null;
   [key: string]: unknown;
 }
 
@@ -91,11 +98,54 @@ function firstNumeric(raw: WfhReimbursementRaw, keys: string[]): number | undefi
   return undefined;
 }
 
-// Company-wide, month-scoped fetch — mirrors Recovery/TDS/Leave's date-scoping, but as a single
-// bulk query (like Meal) rather than per-EmpCode, since the documented request shape takes a date
-// range plus optional filters, not a codes array. Amounts are summed per employee in case someone
-// has more than one approved item in the month (chair + desk + internet, say), same reasoning as
-// Loan Advance's multiple-installment summing.
+function firstString(raw: WfhReimbursementRaw, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const v = raw[key];
+    if (typeof v === 'string' && v.trim() !== '') return v;
+  }
+  return undefined;
+}
+
+// Classic ASP.NET/WCF JSON serializers (which this "Kites" API is almost certainly built on, same
+// family as every other Koenig integration in this codebase) commonly emit dates as
+// "/Date(1699999999000)/" rather than ISO 8601 — handle both.
+function parseApiDate(raw: string): Date | null {
+  const dotNetMatch = raw.match(/\/Date\((-?\d+)\)\//);
+  if (dotNetMatch) {
+    const d = new Date(Number(dotNetMatch[1]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// "YYYY-MM" in UTC, so a plain "YYYY-MM-DD" Request Date (parsed as UTC midnight by `Date`) isn't
+// shifted into the adjacent month by the server's local timezone.
+function monthOf(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function isTruthyFlag(v: unknown): boolean {
+  if (v === null || v === undefined || v === '') return false;
+  const n = Number(v);
+  return !Number.isNaN(n) && n !== 0;
+}
+
+// Company-wide fetch — mirrors Recovery/TDS/Leave's date-scoping, but as a single bulk query (like
+// Meal) rather than per-EmpCode, since the documented request shape takes a date range plus optional
+// filters, not a codes array. RequestedDateFrom/To is sent as a server-side pre-filter, but every
+// record is ALSO re-checked client-side against its own Request Date (requirement: "no
+// reimbursement from another month is displayed") — this doesn't assume the server's date-range
+// filter is honored/inclusive/exclusive the way we expect, it just narrows the payload, and the
+// authoritative per-record field decides month membership. `excludeZero: "1"` and `IsAR: "1"` are
+// required — blank returns zero rows with no error. `Option: "All"` is required too — blank/
+// "Pending" only returns requests still awaiting approval; "All" returns every status, which is why
+// approval is then checked client-side (IsApproved/IsDisapproved) instead of trusting the query to
+// have already filtered to payable claims. Amounts are summed per employee code for every APPROVED
+// request whose Request Date falls in the selected month, in case someone has more than one approved
+// item in the month (chair + desk + internet, say), same reasoning as Loan Advance's
+// multiple-installment summing; each request's Accessories text is also collected (deduplicated)
+// for display in the Payroll Register's Remarks column.
 async function fetchWfhReimbursements(
   creds: WfhCredentials,
   token: TokenState,
@@ -119,11 +169,11 @@ async function fetchWfhReimbursements(
       NotAppr: '',
       NotOrder: '',
       NotDelv: '',
-      excludeZero: '',
-      Is1: '',
+      excludeZero: '1',
+      IsAR: '1',
       UserName: '',
       EmpPassword: '',
-      ALL: '',
+      Option: 'All',
     }),
   });
   if (!res.ok) throw new Error(`common HTTP ${res.status}`);
@@ -132,17 +182,41 @@ async function fetchWfhReimbursements(
   const raws = parseContent(data.content);
 
   const totals = new Map<number, number>();
+  const accessoriesByCode = new Map<number, string[]>();
   for (const raw of raws) {
-    const code = firstNumeric(raw, ['EmpId', 'EmpCode']);
-    const amount = firstNumeric(raw, ['Amount', 'ApprovedAmount', 'ReimbursementAmount', 'TotalAmount']);
-    if (code === undefined || amount === undefined) {
+    const code = firstNumeric(raw, ['RequestedBy', 'EmpId', 'EmpCode']);
+    const amount = firstNumeric(raw, ['cost', 'CostAmount', 'Amount', 'ApprovedAmount', 'ReimbursementAmount', 'TotalAmount']);
+    const dateStr = firstString(raw, ['RequestDate', 'RequestedDate', 'ReqDate', 'RequestedOn']);
+    if (code === undefined || amount === undefined || dateStr === undefined) {
       // eslint-disable-next-line no-console
       console.error('[rayontara-wfh-api] Unrecognized record shape — update the key lists in rayontaraWfhApiPlugin.ts:', raw);
       continue;
     }
+    const parsedDate = parseApiDate(dateStr);
+    if (parsedDate === null) {
+      // eslint-disable-next-line no-console
+      console.error('[rayontara-wfh-api] Request Date could not be parsed — update parseApiDate in rayontaraWfhApiPlugin.ts:', raw);
+      continue;
+    }
+    // Not an error — most of the server's date-range response (if it even honors the filter) is
+    // expected to fall outside this exact month at the range edges; this is the real month gate.
+    if (monthOf(parsedDate) !== selectedMonth) continue;
+    // Option: "All" returns pending/rejected requests too — only an approved, non-disapproved claim
+    // is real money owed to the employee. Not an error, just not payable yet (or ever).
+    if (!isTruthyFlag(raw.IsApproved) || isTruthyFlag(raw.IsDisapproved)) continue;
     totals.set(code, (totals.get(code) ?? 0) + amount);
+    const accessories = typeof raw.Accessories === 'string' ? raw.Accessories.trim() : '';
+    if (accessories) {
+      const existing = accessoriesByCode.get(code) ?? [];
+      if (!existing.includes(accessories)) existing.push(accessories);
+      accessoriesByCode.set(code, existing);
+    }
   }
-  return Array.from(totals, ([code, wfhAmount]) => ({ code, wfhAmount }));
+  return Array.from(totals, ([code, wfhAmount]) => ({
+    code,
+    wfhAmount,
+    remarks: (accessoriesByCode.get(code) ?? []).join(', '),
+  }));
 }
 
 async function fetchWfhWithRetry(

@@ -1,6 +1,7 @@
 export interface WfhReimbursementRecord {
   code: number;
   wfhAmount: number;
+  remarks: string;
 }
 
 export type GlobalWfhResult =
