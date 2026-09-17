@@ -35,5 +35,5 @@ jobs:
           PMS_PASSWORD: ${{ secrets.PMS_PASSWORD }}
           PMS_ROLE: ${{ secrets.PMS_ROLE }}
           PMS_API_KEY: ${{ secrets.PMS_API_KEY }}
-          KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
-          KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}

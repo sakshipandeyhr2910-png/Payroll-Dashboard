@@ -10,9 +10,9 @@
 // api/koenig/employees.ts and api/global/employees.ts read it from (see
 // api/_lib/codeUniverseMatch.ts for the read side and the JSON-safe SerializedCodeUniverse shape).
 //
-// Requires the same PMS_* env vars as the live PMS employee handlers, plus KV_REST_API_URL /
-// KV_REST_API_TOKEN (read by @vercel/kv the same way it would be inside a Vercel function — see
-// api/_lib/kv.ts). When run from GitHub Actions these all come from repo secrets (see
+// Requires the same PMS_* env vars as the live PMS employee handlers, plus TURSO_DATABASE_URL /
+// TURSO_AUTH_TOKEN (read the same way they would be inside a Vercel function — see api/_lib/kv.ts).
+// When run from GitHub Actions these all come from repo secrets (see
 // .github/workflows/warm-koenig-cache.yml); when run locally, from your `.env` (loaded below via
 // a plain `dotenv`-style parse, since this script runs outside Vite's `loadEnv`).
 

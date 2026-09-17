@@ -174,12 +174,21 @@ Vite framework preset; `vercel.json` at the repo root pins `buildCommand`, `outp
 rewrite so client-side routing (`/entity/koenig`, etc.) still serves `index.html` for any path that
 isn't under `/api/`.
 
-### 2. Connect a KV/Redis store
+### 2. Create a Turso database
 
-Open the project's **Storage** tab → **Create Database** (or **Marketplace** → a Redis provider) →
-connect a Redis-compatible store to the project. This automatically populates the
-`KV_REST_API_URL` and `KV_REST_API_TOKEN` environment variables that `api/_lib/kv.ts`
-(`@vercel/kv`) reads — no manual env var entry needed for those two.
+`api/_lib/kv.ts` stores everything shared across serverless invocations (session revocation,
+cached Kites API tokens, the employee-code-universe cache, and frozen month-end Payroll Register
+snapshots) in [Turso](https://turso.tech) (libSQL) rather than Vercel KV/Redis. Create a database
+(via the Turso CLI or dashboard), then grab its URL and an auth token:
+
+```bash
+turso db create payroll-database
+turso db show payroll-database --url
+turso db tokens create payroll-database
+```
+
+You'll set these as `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` in the next step — no schema setup
+needed, `api/_lib/kv.ts` creates its one table itself on first use.
 
 ### 3. Set environment variables
 
@@ -191,6 +200,7 @@ one:
   anyone with it can mint a valid session token.
 - **`DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` — required.** The shared dashboard login, same as
   local dev.
+- **`TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` — required.** From step 2.
 - **Per-feature blocks (all optional — a blank block just falls back to static/sample data for
   that feature, same as local dev):**
   - `PMS_API_BASE`, `PMS_USERNAME`, `PMS_PASSWORD`, `PMS_ROLE`, `PMS_API_KEY`
@@ -201,6 +211,7 @@ one:
   - `TDS_API_BASE`, `TDS_USERNAME`, `TDS_PASSWORD`, `TDS_ROLE`, `TDS_API_KEY`
   - `LEAVE_API_BASE`, `LEAVE_USERNAME`, `LEAVE_PASSWORD`, `LEAVE_ROLE`, `LEAVE_API_KEY`
   - `ARREAR_API_BASE`, `ARREAR_USERNAME`, `ARREAR_PASSWORD`, `ARREAR_ROLE`, `ARREAR_API_KEY`
+  - `WFH_API_BASE`, `WFH_USERNAME`, `WFH_PASSWORD`, `WFH_ROLE`, `WFH_API_KEY`
   - `KITES_DECRYPT_PASSWORD`, `KITES_DECRYPT_SALT` — shared by the Appraisal and Arrear APIs to
     decrypt their encrypted Amount/Salary fields (see `api/_lib/koenigDecryption.ts`)
 
@@ -212,13 +223,12 @@ The Koenig and Global entity pages resolve each employee's PMS Emp Code via a ~1
 across the company's known code ranges (see `api/_lib/codeUniverseMatch.ts`). That scan is far too
 slow to run inside a single serverless invocation (Hobby plan: 10-second max execution time), so it
 runs out-of-band instead, via `scripts/warmCodeUniverse.ts` and the scheduled workflow at
-`.github/workflows/warm-koenig-cache.yml`, which writes its result to the same KV store connected
-in step 2.
+`.github/workflows/warm-koenig-cache.yml`, which writes its result to the same Turso database
+created in step 2.
 
 1. In the GitHub repo's **Settings → Secrets and variables → Actions**, add these repo secrets:
-   `PMS_API_BASE`, `PMS_USERNAME`, `PMS_PASSWORD`, `PMS_ROLE`, `PMS_API_KEY`, `KV_REST_API_URL`,
-   `KV_REST_API_TOKEN` (the last two are the same values from step 2 — copy them from the Vercel
-   project's Storage tab or its Environment Variables page).
+   `PMS_API_BASE`, `PMS_USERNAME`, `PMS_PASSWORD`, `PMS_ROLE`, `PMS_API_KEY`, `TURSO_DATABASE_URL`,
+   `TURSO_AUTH_TOKEN` (the last two are the same values from step 2/3).
 2. **The workflow must be run at least once manually before the Koenig/Global pages will work in
    production** — go to the **Actions** tab → **Warm Koenig/Global employee code cache** →
    **Run workflow**. Until it's run once, `api/koenig/employees.ts` and `api/global/employees.ts`
