@@ -97,18 +97,35 @@ export default function EmployeeDashboard({ employee, onLogout }: Props) {
     ['Recovery', data.recovery],
     ['Professional Tax', data.professionalTax],
   ] : [];
+  const totalDeductions = deductionRows.reduce((sum, [, v]) => sum + v, 0);
 
   const additionRows: [string, number][] = data ? [
     ['NPS (Employer + Employee)', data.nps],
     ['Appraisal Arrear', data.appraisalArrear],
     ['WFH Reimbursement', data.wfh],
   ] : [];
+  const totalAdditions = additionRows.reduce((sum, [, v]) => sum + v, 0);
+
+  const profileFields: [string, string | null][] = data ? [
+    ['Department', data.department],
+    ['Manager', data.manager],
+    ['Base Location', data.location],
+    ['Country', data.country],
+    ['Bank Name', data.bankName],
+    ['Bank Account No.', data.bankAccount],
+    ['IFSC Code', data.ifsc],
+    ['UAN', data.uan],
+    ['Registered Email', data.email],
+  ] : [];
 
   return (
     <div className="app">
       <div className="main" style={{ marginLeft: 0 }}>
         <header className="topbar">
-          <div className="search-box" style={{ visibility: 'hidden' }} />
+          <div className="topbar-brand">
+            <div className="topbar-brand-title">KOENIG</div>
+            <div className="topbar-brand-sub">Employee Payroll Portal</div>
+          </div>
           <div className="topbar-right">
             <div className="user-chip">
               <div className="user-avatar">{initials(employee.name)}</div>
@@ -118,7 +135,7 @@ export default function EmployeeDashboard({ employee, onLogout }: Props) {
           </div>
         </header>
         <div className="content">
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 24 }}>
+          <div className="page-head">
             <div>
               <h1 className="page-title">My Payroll</h1>
               <p className="page-desc">Employee Code {employee.code} · {employee.entitySlug}</p>
@@ -126,7 +143,7 @@ export default function EmployeeDashboard({ employee, onLogout }: Props) {
             <MonthControl selectedMonth={selectedMonth} onChange={setSelectedMonth} />
           </div>
 
-          {loading && <p>Loading your payroll data…</p>}
+          {loading && <p className="page-desc">Loading your payroll data…</p>}
           {error && <div className="login-error" style={{ marginTop: 12 }}>{error}</div>}
 
           {data && !loading && (
@@ -156,61 +173,59 @@ export default function EmployeeDashboard({ employee, onLogout }: Props) {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 8 }}>
-                <div style={{ flex: '1 1 260px' }}>
-                  <h3 style={{ fontSize: 13, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.4px', marginBottom: 8 }}>Deductions</h3>
-                  <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                    <tbody>
-                      {deductionRows.map(([label, value]) => (
-                        <tr key={label} style={{ borderBottom: '1px solid var(--border)' }}>
-                          <td style={{ padding: '7px 10px', fontSize: 13, color: 'var(--text-muted)' }}>{label}</td>
-                          <td style={{ padding: '7px 10px', fontSize: 13, textAlign: 'right' }}>{fmtAmount(value, data.currency)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              <div className="payroll-grid">
+                <div className="payroll-card">
+                  <h3 className="payroll-card-title">
+                    <span className="dot" style={{ background: '#e05252' }} />
+                    Deductions
+                  </h3>
+                  {deductionRows.map(([label, value]) => (
+                    <div className="payroll-row" key={label}>
+                      <span className="payroll-row-label">{label}</span>
+                      <span className="payroll-row-value">{fmtAmount(value, data.currency)}</span>
+                    </div>
+                  ))}
+                  <div className="payroll-total-row">
+                    <span>Total Deductions</span>
+                    <span>{fmtAmount(totalDeductions, data.currency)}</span>
+                  </div>
                 </div>
-                <div style={{ flex: '1 1 260px' }}>
-                  <h3 style={{ fontSize: 13, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.4px', marginBottom: 8 }}>Additions</h3>
-                  <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                    <tbody>
-                      {additionRows.map(([label, value]) => (
-                        <tr key={label} style={{ borderBottom: '1px solid var(--border)' }}>
-                          <td style={{ padding: '7px 10px', fontSize: 13, color: 'var(--text-muted)' }}>{label}</td>
-                          <td style={{ padding: '7px 10px', fontSize: 13, textAlign: 'right' }}>{fmtAmount(value, data.currency)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="payroll-card">
+                  <h3 className="payroll-card-title">
+                    <span className="dot" style={{ background: 'var(--good)' }} />
+                    Additions
+                  </h3>
+                  {additionRows.map(([label, value]) => (
+                    <div className="payroll-row" key={label}>
+                      <span className="payroll-row-label">{label}</span>
+                      <span className="payroll-row-value">{fmtAmount(value, data.currency)}</span>
+                    </div>
+                  ))}
+                  <div className="payroll-total-row">
+                    <span>Total Additions</span>
+                    <span>{fmtAmount(totalAdditions, data.currency)}</span>
+                  </div>
                 </div>
               </div>
 
-              <table style={{ marginTop: 28, borderCollapse: 'collapse', width: '100%', maxWidth: 560 }}>
-                <tbody>
-                  {[
-                    ['Department', data.department],
-                    ['Manager', data.manager],
-                    ['Base Location', data.location],
-                    ['Country', data.country],
-                    ['Bank Name', data.bankName],
-                    ['Bank Account No.', data.bankAccount],
-                    ['IFSC Code', data.ifsc],
-                    ['UAN', data.uan],
-                    ['Registered Email', data.email],
-                  ].map(([label, value]) => (
-                    <tr key={label} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--text-muted)', fontSize: 13 }}>{label}</td>
-                      <td style={{ padding: '8px 12px', fontSize: 13 }}>{value || '—'}</td>
-                    </tr>
+              <div className="payroll-card" style={{ marginTop: 20 }}>
+                <h3 className="payroll-card-title">
+                  <span className="dot" style={{ background: 'var(--purple)' }} />
+                  Profile &amp; Bank Details
+                </h3>
+                <div className="profile-grid">
+                  {profileFields.map(([label, value]) => (
+                    <div key={label}>
+                      <div className="profile-field-label">{label}</div>
+                      <div className="profile-field-value">{value || '—'}</div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              </div>
 
-              <p className="page-desc" style={{ marginTop: 24 }}>
+              <p className="page-desc" style={{ marginTop: 20 }}>
                 Meal Pass deductions aren't reflected in Net Payable yet — every other figure
-                (Salary, PF, ESI, Loan, TDS, NPS, VPF, TA/DA, Recovery, Professional Tax, Appraisal
-                Arrear, WFH) is computed the same way HR's Payroll Register computes it for this
-                month.
+                above is computed the same way HR's Payroll Register computes it for this month.
               </p>
             </>
           )}
