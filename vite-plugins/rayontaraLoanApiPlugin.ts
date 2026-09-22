@@ -152,7 +152,7 @@ async function fetchAdvancesForCodes(
   return results;
 }
 
-async function fetchAdvancesWithRetry(creds: LoanCredentials, codes: number[]): Promise<LoanAdvanceRecord[]> {
+export async function fetchAdvancesWithRetry(creds: LoanCredentials, codes: number[]): Promise<LoanAdvanceRecord[]> {
   if (!cachedToken) cachedToken = await fetchToken(creds);
   try {
     return await fetchAdvancesForCodes(creds, cachedToken, codes);

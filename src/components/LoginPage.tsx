@@ -6,6 +6,7 @@ interface Props {
 }
 
 type EmployeeStep = 'identifier' | 'otp';
+type IdentifierMode = 'code' | 'email';
 
 function ShieldIcon() {
   return (
@@ -58,8 +59,7 @@ function HrAdminCard({ onLoggedIn }: Props) {
     <div className="login-card">
       <div className="login-card-icon"><ShieldIcon /></div>
       <h2 className="login-card-title">HR Admin</h2>
-      <p className="login-card-desc">Full access to every payroll module, entity, and report.</p>
-      <form onSubmit={handleSubmit}>
+      <form className="login-form" onSubmit={handleSubmit}>
         <label className="login-label" htmlFor="login-username">Username</label>
         <input
           id="login-username"
@@ -87,12 +87,19 @@ function HrAdminCard({ onLoggedIn }: Props) {
 }
 
 function EmployeeLoginCard({ onLoggedIn }: Props) {
+  const [mode, setMode] = useState<IdentifierMode>('code');
   const [step, setStep] = useState<EmployeeStep>('identifier');
   const [identifier, setIdentifier] = useState('');
   const [otp, setOtp] = useState('');
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const switchMode = (next: IdentifierMode) => {
+    setMode(next);
+    setIdentifier('');
+    setError(null);
+  };
 
   const requestOtp = async (e: FormEvent) => {
     e.preventDefault();
@@ -142,14 +149,13 @@ function EmployeeLoginCard({ onLoggedIn }: Props) {
     }
   };
 
-  return (
-    <div className="login-card login-card--employee">
-      <div className="login-card-icon"><UserIcon /></div>
-      <h2 className="login-card-title">Employee Login</h2>
-      <p className="login-card-desc">View your own payroll information — no other employee's data is accessible.</p>
-
-      {step === 'otp' ? (
-        <form onSubmit={verifyOtp}>
+  if (step === 'otp') {
+    return (
+      <div className="login-card login-card--employee">
+        <div className="login-card-icon"><UserIcon /></div>
+        <h2 className="login-card-title">Employee Login</h2>
+        <p className="login-card-desc">Enter the code sent to your registered email.</p>
+        <form className="login-form" onSubmit={verifyOtp}>
           {info && <div className="login-info">{info}</div>}
           <label className="login-label" htmlFor="login-otp">Verification code</label>
           <input
@@ -171,26 +177,53 @@ function EmployeeLoginCard({ onLoggedIn }: Props) {
             className="login-link-btn"
             onClick={() => { setStep('identifier'); setOtp(''); setError(null); setInfo(null); }}
           >
-            Use a different Employee ID or email
+            Use a different Employee Code or email
           </button>
         </form>
-      ) : (
-        <form onSubmit={requestOtp}>
-          <label className="login-label" htmlFor="login-identifier">Employee ID or registered email</label>
-          <input
-            id="login-identifier"
-            className="login-input"
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
-            autoComplete="username"
-            placeholder="e.g. 3595 or you@koenig-solutions.com"
-          />
-          {error && <div className="login-error">{error}</div>}
-          <button className="login-btn login-btn--employee" type="submit" disabled={loading || !identifier.trim()}>
-            {loading ? 'Sending…' : 'Send OTP'}
-          </button>
-        </form>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="login-card login-card--employee">
+      <div className="login-card-icon"><UserIcon /></div>
+      <h2 className="login-card-title">Employee Login</h2>
+      <p className="login-card-desc">View your own payroll information only.</p>
+      <div className="login-identifier-toggle">
+        <button
+          type="button"
+          className={`login-identifier-btn${mode === 'code' ? ' active' : ''}`}
+          onClick={() => switchMode('code')}
+        >
+          Employee Code
+        </button>
+        <button
+          type="button"
+          className={`login-identifier-btn${mode === 'email' ? ' active' : ''}`}
+          onClick={() => switchMode('email')}
+        >
+          Email ID
+        </button>
+      </div>
+      <form className="login-form" onSubmit={requestOtp}>
+        <label className="login-label" htmlFor="login-identifier">
+          {mode === 'code' ? 'Employee Code' : 'Registered email'}
+        </label>
+        <input
+          id="login-identifier"
+          className="login-input"
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
+          autoComplete={mode === 'code' ? 'off' : 'username'}
+          inputMode={mode === 'code' ? 'numeric' : 'email'}
+          type={mode === 'code' ? 'text' : 'email'}
+          placeholder={mode === 'code' ? 'e.g. 3595' : 'e.g. you@koenig-solutions.com'}
+        />
+        {error && <div className="login-error">{error}</div>}
+        <button className="login-btn login-btn--employee" type="submit" disabled={loading || !identifier.trim()}>
+          {loading ? 'Sending…' : 'Send OTP'}
+        </button>
+      </form>
     </div>
   );
 }

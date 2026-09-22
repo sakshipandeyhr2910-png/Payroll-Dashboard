@@ -185,7 +185,7 @@ async function fetchRecoveryForCodes(
   return results;
 }
 
-async function fetchRecoveryWithRetry(
+export async function fetchRecoveryWithRetry(
   creds: RecoveryCredentials,
   codes: number[],
   selectedMonth: string,

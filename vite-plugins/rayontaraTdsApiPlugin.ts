@@ -148,7 +148,7 @@ async function fetchTdsForCodes(
   return results;
 }
 
-async function fetchTdsWithRetry(
+export async function fetchTdsWithRetry(
   creds: TdsCredentials,
   codes: number[],
   selectedMonth: string,

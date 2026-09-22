@@ -128,15 +128,15 @@ export default defineConfig(({ mode, command }) => {
             from: env.SMTP_FROM,
           },
         ),
-        employeePayrollPlugin(
-          {
+        employeePayrollPlugin({
+          pms: {
             base: env.PMS_API_BASE,
             username: env.PMS_USERNAME,
             password: env.PMS_PASSWORD,
             role: env.PMS_ROLE,
             apiKey: env.PMS_API_KEY,
           },
-          {
+          appraisal: {
             base: env.APPRAISAL_API_BASE,
             username: env.APPRAISAL_USERNAME,
             password: env.APPRAISAL_PASSWORD,
@@ -145,7 +145,44 @@ export default defineConfig(({ mode, command }) => {
             decryptPassword: env.KITES_DECRYPT_PASSWORD,
             decryptSalt: env.KITES_DECRYPT_SALT,
           },
-        ),
+          loan: {
+            base: env.LOAN_API_BASE,
+            username: env.LOAN_USERNAME,
+            password: env.LOAN_PASSWORD,
+            role: env.LOAN_ROLE,
+            apiKey: env.LOAN_API_KEY,
+          },
+          arrear: {
+            base: env.ARREAR_API_BASE,
+            username: env.ARREAR_USERNAME,
+            password: env.ARREAR_PASSWORD,
+            role: env.ARREAR_ROLE,
+            apiKey: env.ARREAR_API_KEY,
+            decryptPassword: env.KITES_DECRYPT_PASSWORD,
+            decryptSalt: env.KITES_DECRYPT_SALT,
+          },
+          recovery: {
+            base: env.RECOVERY_API_BASE,
+            username: env.RECOVERY_USERNAME,
+            password: env.RECOVERY_PASSWORD,
+            role: env.RECOVERY_ROLE,
+            apiKey: env.RECOVERY_API_KEY,
+          },
+          tds: {
+            base: env.TDS_API_BASE,
+            username: env.TDS_USERNAME,
+            password: env.TDS_PASSWORD,
+            role: env.TDS_ROLE,
+            apiKey: env.TDS_API_KEY,
+          },
+          wfh: {
+            base: env.WFH_API_BASE,
+            username: env.WFH_USERNAME,
+            password: env.WFH_PASSWORD,
+            role: env.WFH_ROLE,
+            apiKey: env.WFH_API_KEY,
+          },
+        }),
       ]),
     ],
     server: {

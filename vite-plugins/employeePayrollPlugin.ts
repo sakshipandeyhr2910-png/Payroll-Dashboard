@@ -2,22 +2,43 @@ import type { Plugin, ViteDevServer, PreviewServer } from 'vite';
 import type { IncomingMessage } from 'http';
 import { fetchToken, fetchEmployeeByCode, type PmsCredentials } from './rayontaraApiPlugin';
 import { fetchAppraisalForKoenig, type AppraisalCredentials } from './rayontaraAppraisalApiPlugin';
+import { fetchAdvancesWithRetry, type LoanCredentials } from './rayontaraLoanApiPlugin';
+import { fetchArrearWithRetry, type ArrearCredentials, type ArrearRecord } from './rayontaraArrearApiPlugin';
+import { fetchRecoveryWithRetry, type RecoveryCredentials } from './rayontaraRecoveryApiPlugin';
+import { fetchTdsWithRetry, type TdsCredentials } from './rayontaraTdsApiPlugin';
+import { fetchWfhWithRetry, type WfhCredentials } from './rayontaraWfhApiPlugin';
 import type { SessionClaims } from './dashboardAuthPlugin';
+import {
+  professionalTaxForLocation,
+  weekdaysInMonth,
+  presentDaysForMonth,
+  appraisalArrearForMonth,
+  payScaleForMonth,
+  totalLoanDeductionForMonth,
+  round2,
+  toCalcNumber,
+} from './payrollCompute';
 
-// Answers "what is MY OWN payroll data", for the logged-in employee only. The gate in
-// dashboardAuthPlugin.ts already guarantees every request here carries a verified 'employee'
-// session (rejecting anything else with 403 before this file ever runs) and attaches its claims to
-// req.sessionClaims — this handler reads empCode/entitySlug from THAT, never from a query string or
-// request body, so there is no parameter an employee could change to see someone else's row.
-//
-// Scope note: this returns the employee's own PMS profile (name, designation, DOJ, bank details,
-// location) plus their Pay Scale/currency from the Appraisal API — the same base facts HR sees.
-// It does not yet replicate the full per-entity Net Payable computation (Loan/Recovery/TDS/Leave/
-// Arrear/WFH, PF proration, professional tax, etc.) that EntityPage.tsx computes for HR's bulk
-// view — that logic is entity-specific and deeply embedded in that component; reusing it correctly
-// for a single employee is worth doing as a follow-up rather than rushing a second, divergent copy
-// of a payroll calculation.
-function registerMiddleware(server: ViteDevServer | PreviewServer, pmsCreds: PmsCredentials, appraisalCreds: AppraisalCredentials) {
+// Local-dev mirror of api/_lib/routes/employeePayroll.ts — see that file's header comment for the
+// full reasoning (same per-entity scoping flags, same net payable formula, same one deliberate
+// gap: Meal Passes isn't wired in yet). Answers "what is MY OWN payroll data for a given month",
+// deriving empCode/entitySlug from req.sessionClaims (set by dashboardAuthPlugin.ts's gate, which
+// already rejected anything that isn't a verified 'employee' session before this file ever runs).
+const REAL_CODE_ENTITIES = new Set(['koenig', 'rayontara', 'global']);
+const MONTH_PATTERN = /^\d{4}-\d{2}$/;
+const DEFAULT_MONTH = '2026-08'; // mirrors src/utils/month.ts's BASE_MONTH
+
+export interface EmployeePayrollCredentials {
+  pms: PmsCredentials;
+  appraisal: AppraisalCredentials;
+  loan: LoanCredentials;
+  arrear: ArrearCredentials;
+  recovery: RecoveryCredentials;
+  tds: TdsCredentials;
+  wfh: WfhCredentials;
+}
+
+function registerMiddleware(server: ViteDevServer | PreviewServer, creds: EmployeePayrollCredentials) {
   server.middlewares.use('/api/employee/payroll', async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.method !== 'GET') {
@@ -27,27 +48,83 @@ function registerMiddleware(server: ViteDevServer | PreviewServer, pmsCreds: Pms
     }
     const claims = (req as IncomingMessage & { sessionClaims?: SessionClaims }).sessionClaims;
     if (!claims || claims.role !== 'employee') {
-      // Belt-and-suspenders — the gate middleware should already have rejected this, but a
-      // handler that touches payroll data should never trust that alone.
       res.statusCode = 401;
       res.end(JSON.stringify({ ok: false, error: 'Not authenticated' }));
       return;
     }
+
+    const url = new URL(req.url || '', 'http://localhost');
+    const monthParam = url.searchParams.get('month') || '';
+    const month = MONTH_PATTERN.test(monthParam) ? monthParam : DEFAULT_MONTH;
+    const entitySlug = claims.entitySlug;
+    const isRealCodeEntity = REAL_CODE_ENTITIES.has(entitySlug);
+    const isAppraisalPfEntity = isRealCodeEntity;
+    const isRecoveryScopedEntity = isRealCodeEntity || entitySlug === 'dubai';
+    const isWfhScopedEntity = entitySlug === 'global';
+    const codes = [claims.empCode];
+
     try {
-      const token = await fetchToken(pmsCreds);
-      const [record, appraisalRecords] = await Promise.all([
-        fetchEmployeeByCode(pmsCreds, token, claims.empCode),
-        fetchAppraisalForKoenig(appraisalCreds, [claims.empCode]),
+      const token = await fetchToken(creds.pms);
+      const [record, appraisalRecords, loanRecords, arrearRecords, recoveryRecords, tdsRecords, wfhRecords] = await Promise.all([
+        fetchEmployeeByCode(creds.pms, token, claims.empCode),
+        fetchAppraisalForKoenig(creds.appraisal, codes),
+        fetchAdvancesWithRetry(creds.loan, codes),
+        fetchArrearWithRetry(creds.arrear, codes),
+        isRecoveryScopedEntity ? fetchRecoveryWithRetry(creds.recovery, codes, month) : Promise.resolve([]),
+        isRealCodeEntity ? fetchTdsWithRetry(creds.tds, codes, month) : Promise.resolve([]),
+        isWfhScopedEntity ? fetchWfhWithRetry(creds.wfh, month) : Promise.resolve([]),
       ]);
+
       if (!record) {
         res.statusCode = 404;
         res.end(JSON.stringify({ ok: false, error: 'Your employee record could not be found. Please contact HR.' }));
         return;
       }
+
       const appraisal = appraisalRecords[0];
+      const arrearRecord: ArrearRecord | undefined = arrearRecords[0];
+      const recoveryRecord = recoveryRecords[0];
+      const tdsRecord = tdsRecords[0];
+      const wfhRecord = wfhRecords.find((r) => r.code === claims.empCode);
+
+      const currentPayScale = appraisal?.amount ?? undefined;
+      const correctedPayScale = currentPayScale !== undefined ? payScaleForMonth(arrearRecord, month, currentPayScale) : undefined;
+      const calendarTotalDays = weekdaysInMonth(month);
+      const totalDaysAfterLeaveTaken = presentDaysForMonth(record.date_of_joining, month);
+      const gross = correctedPayScale !== undefined && totalDaysAfterLeaveTaken !== undefined && calendarTotalDays > 0
+        ? round2((correctedPayScale / calendarTotalDays) * totalDaysAfterLeaveTaken)
+        : undefined;
+
+      const esi = currentPayScale !== undefined && isAppraisalPfEntity && gross !== undefined
+        ? (currentPayScale < 21000 ? round2(gross * 0.0075) : 0)
+        : 0;
+      const rawPf = appraisal?.epf ?? null;
+      const pf = isAppraisalPfEntity
+        ? (rawPf === 1800 && totalDaysAfterLeaveTaken !== undefined && calendarTotalDays > 0
+          ? (totalDaysAfterLeaveTaken === calendarTotalDays ? rawPf : round2((1800 / calendarTotalDays) * totalDaysAfterLeaveTaken))
+          : (rawPf ?? 0))
+        : 0;
+      const nps = isAppraisalPfEntity && appraisal
+        ? (appraisal.allowNPS ? toCalcNumber(appraisal.employeeShare) + toCalcNumber(appraisal.employerShare) : 0)
+        : 0;
+
+      const loan = totalLoanDeductionForMonth(loanRecords, month);
+      const appraisalArrear = appraisalArrearForMonth(arrearRecord, month);
+      const vpf = isRecoveryScopedEntity ? toCalcNumber(recoveryRecord?.vpf) : 0;
+      const tada = isRecoveryScopedEntity ? toCalcNumber(recoveryRecord?.tada) : 0;
+      const recovery = isRecoveryScopedEntity ? toCalcNumber(recoveryRecord?.recovery) : 0;
+      const tds = isRealCodeEntity ? toCalcNumber(tdsRecord?.tds) : 0;
+      const wfh = isWfhScopedEntity ? toCalcNumber(wfhRecord?.wfhAmount) : 0;
+      const pt = professionalTaxForLocation(record.city_name);
+
+      const net = gross === undefined ? null : round2(
+        gross - (pf + esi + loan + tds + nps) - (vpf + tada + recovery + pt) + appraisalArrear - 0 /* mealpass */ + wfh,
+      );
+
       res.statusCode = 200;
       res.end(JSON.stringify({
         ok: true,
+        month,
         employee: {
           code: claims.empCode,
           entitySlug: claims.entitySlug,
@@ -65,8 +142,20 @@ function registerMiddleware(server: ViteDevServer | PreviewServer, pmsCreds: Pms
           manager: record.manager_name,
           resigned: !!record.date_of_resigantion,
           resignationDate: record.date_of_resigantion,
-          payScale: appraisal?.amount ?? null,
           currency: appraisal?.currency ?? null,
+          salary: gross ?? null,
+          pf,
+          esi,
+          loan,
+          tds,
+          nps,
+          vpf,
+          tada,
+          recovery,
+          professionalTax: pt,
+          appraisalArrear,
+          wfh,
+          netPayable: net,
         },
       }));
     } catch (err) {
@@ -78,14 +167,14 @@ function registerMiddleware(server: ViteDevServer | PreviewServer, pmsCreds: Pms
   });
 }
 
-export function employeePayrollPlugin(pmsCreds: PmsCredentials, appraisalCreds: AppraisalCredentials): Plugin {
+export function employeePayrollPlugin(creds: EmployeePayrollCredentials): Plugin {
   return {
     name: 'employee-payroll',
     configureServer(server) {
-      registerMiddleware(server, pmsCreds, appraisalCreds);
+      registerMiddleware(server, creds);
     },
     configurePreviewServer(server) {
-      registerMiddleware(server, pmsCreds, appraisalCreds);
+      registerMiddleware(server, creds);
     },
   };
 }

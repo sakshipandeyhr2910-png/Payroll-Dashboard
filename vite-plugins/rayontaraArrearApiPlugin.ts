@@ -157,7 +157,7 @@ async function fetchArrearForCodes(
   return results;
 }
 
-async function fetchArrearWithRetry(creds: ArrearCredentials, codes: number[]): Promise<ArrearRecord[]> {
+export async function fetchArrearWithRetry(creds: ArrearCredentials, codes: number[]): Promise<ArrearRecord[]> {
   if (!cachedToken) cachedToken = await fetchToken(creds);
   try {
     return await fetchArrearForCodes(creds, cachedToken, codes);

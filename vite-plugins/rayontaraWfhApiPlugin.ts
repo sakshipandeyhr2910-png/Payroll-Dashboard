@@ -219,7 +219,7 @@ async function fetchWfhReimbursements(
   }));
 }
 
-async function fetchWfhWithRetry(
+export async function fetchWfhWithRetry(
   creds: WfhCredentials,
   selectedMonth: string,
 ): Promise<WfhReimbursementRecord[]> {
