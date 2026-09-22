@@ -2,6 +2,16 @@ import type { PayrollRow } from '../types';
 
 export const BASE_MONTH = '2026-08';
 
+// The real, actual current calendar month — used as the default selectedMonth so entities (now
+// live, not illustrative) open on the month someone actually expects to see. Deliberately
+// separate from BASE_MONTH above, which anchors the illustrative sample-data scaling and
+// Rayontara's fixed uploaded-Salary-Sheet period — neither of those should track the real clock,
+// only the default landing month should.
+export function currentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 // True once a month's own last calendar day has actually passed on the real clock — deliberately
 // NOT relative to BASE_MONTH (which is this dashboard's fixed illustrative "today" for sample
 // data, not a real date that advances). The month-end freeze (see EntityPage.tsx and

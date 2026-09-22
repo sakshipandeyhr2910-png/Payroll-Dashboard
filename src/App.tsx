@@ -4,7 +4,7 @@ import Topbar from './components/Topbar';
 import OverviewPage from './components/OverviewPage';
 import EntityPage from './components/EntityPage';
 import { ENTITIES, bySlug } from './data/entities';
-import { BASE_MONTH } from './utils/month';
+import { currentMonth } from './utils/month';
 import type { CategoryFilter } from './types';
 import type { CurrencyFilterValue } from './components/CurrencyChips';
 
@@ -18,7 +18,7 @@ export default function App({ onLogout }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('All');
   const [currencyFilter, setCurrencyFilter] = useState<CurrencyFilterValue>('All');
-  const [selectedMonth, setSelectedMonth] = useState<string>(BASE_MONTH);
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonth());
 
   const navigate = useCallback((tab: TabId) => {
     setActiveTab((prevTab) => {

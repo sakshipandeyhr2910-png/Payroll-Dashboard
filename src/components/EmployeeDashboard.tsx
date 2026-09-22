@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { EmployeeIdentity } from '../auth';
 import MonthControl from './MonthControl';
-import { BASE_MONTH } from '../utils/month';
+import { currentMonth } from '../utils/month';
 
 interface Props {
   employee: EmployeeIdentity;
@@ -59,7 +59,7 @@ function initials(name: string): string {
 }
 
 export default function EmployeeDashboard({ employee, onLogout }: Props) {
-  const [selectedMonth, setSelectedMonth] = useState(BASE_MONTH);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [data, setData] = useState<EmployeePayroll | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

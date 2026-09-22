@@ -36,7 +36,10 @@ import {
 // any entity/employee it doesn't apply to already does.
 const REAL_CODE_ENTITIES = new Set(['koenig', 'rayontara', 'global']);
 const MONTH_PATTERN = /^\d{4}-\d{2}$/;
-const DEFAULT_MONTH = '2026-08'; // mirrors src/utils/month.ts's BASE_MONTH
+function defaultMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -55,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const monthParam = typeof req.query.month === 'string' ? req.query.month : '';
-  const month = MONTH_PATTERN.test(monthParam) ? monthParam : DEFAULT_MONTH;
+  const month = MONTH_PATTERN.test(monthParam) ? monthParam : defaultMonth();
   const entitySlug = claims.entitySlug;
   const isRealCodeEntity = REAL_CODE_ENTITIES.has(entitySlug);
   const isAppraisalPfEntity = isRealCodeEntity;

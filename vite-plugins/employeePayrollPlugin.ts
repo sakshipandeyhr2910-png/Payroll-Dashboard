@@ -26,7 +26,10 @@ import {
 // already rejected anything that isn't a verified 'employee' session before this file ever runs).
 const REAL_CODE_ENTITIES = new Set(['koenig', 'rayontara', 'global']);
 const MONTH_PATTERN = /^\d{4}-\d{2}$/;
-const DEFAULT_MONTH = '2026-08'; // mirrors src/utils/month.ts's BASE_MONTH
+function defaultMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
 
 export interface EmployeePayrollCredentials {
   pms: PmsCredentials;
@@ -55,7 +58,7 @@ function registerMiddleware(server: ViteDevServer | PreviewServer, creds: Employ
 
     const url = new URL(req.url || '', 'http://localhost');
     const monthParam = url.searchParams.get('month') || '';
-    const month = MONTH_PATTERN.test(monthParam) ? monthParam : DEFAULT_MONTH;
+    const month = MONTH_PATTERN.test(monthParam) ? monthParam : defaultMonth();
     const entitySlug = claims.entitySlug;
     const isRealCodeEntity = REAL_CODE_ENTITIES.has(entitySlug);
     const isAppraisalPfEntity = isRealCodeEntity;
