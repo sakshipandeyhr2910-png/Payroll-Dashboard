@@ -9,8 +9,19 @@ import { kv } from './kv';
 const TOKEN_TTL = '12h';
 const TOKEN_TTL_SECONDS = 12 * 60 * 60;
 
+// A session is either the single shared HR Admin login (full access to every existing bulk
+// route) or one employee's session, scoped to exactly their own Emp Code/entity — minted only
+// after OTP verification (api/_lib/routes/employeeAuthVerifyOtp.ts), never here. The employee
+// variant's fields are signed into the JWT itself, so /api/employee/* handlers can derive "whose
+// data is this" from the verified token alone — never from a query param or request body, which
+// is what actually prevents one employee from ever requesting another's payroll data.
+export type SessionClaims =
+  | { role: 'hr' }
+  | { role: 'employee'; empCode: number; entitySlug: string; name: string; email: string | null };
+
 export interface JwtClaims extends jwt.JwtPayload {
   jti: string;
+  session: SessionClaims;
 }
 
 function requireSecret(): string {
@@ -19,8 +30,8 @@ function requireSecret(): string {
   return secret;
 }
 
-export function signSessionToken(jti: string): string {
-  return jwt.sign({ jti }, requireSecret(), { expiresIn: TOKEN_TTL });
+export function signSessionToken(jti: string, session: SessionClaims): string {
+  return jwt.sign({ jti, session }, requireSecret(), { expiresIn: TOKEN_TTL });
 }
 
 export const SESSION_TOKEN_TTL_SECONDS = TOKEN_TTL_SECONDS;
@@ -31,17 +42,27 @@ function tokenFromRequest(req: VercelRequest): string {
   return (value || '').replace(/^Bearer\s+/i, '');
 }
 
-export type AuthResult = { ok: true } | { ok: false; status: number; body: { ok: false; error: string } };
+export type AuthResult =
+  | { ok: true; claims: SessionClaims }
+  | { ok: false; status: number; body: { ok: false; error: string } };
 
 const UNAUTHORIZED: AuthResult = { ok: false, status: 401, body: { ok: false, error: 'Not authenticated' } };
+const FORBIDDEN: AuthResult = { ok: false, status: 403, body: { ok: false, error: 'Forbidden' } };
 
 // Every protected handler calls this first. Verifies the Bearer token's signature/expiry (a
-// forged or expired token is rejected without ever touching KV), then checks the `revoked:<jti>`
+// forged or expired token is rejected without ever touching KV), checks the `revoked:<jti>`
 // blocklist so an explicit logout takes effect immediately rather than waiting out the token's
-// remaining 12h lifetime. Returns the exact same 401 `{ok:false,error:'Not authenticated'}` shape
-// the old in-memory gate used, so the frontend's existing 401-triggers-logout handling (see
-// src/auth.ts's fetch interceptor) needs no changes.
-export async function requireAuth(req: VercelRequest): Promise<AuthResult> {
+// remaining 12h lifetime, and — critically — checks the session's own role against what this
+// route requires.
+//
+// `requiredRole` defaults to 'hr' so every one of this codebase's existing `requireAuth(req)`
+// call sites (every Koenig/Rayontara/Global/Overseas/snapshot handler, none of which pass a
+// second argument) automatically now reject an authenticated 'employee' session with 403 instead
+// of silently letting it through — that gap (an employee token being just as valid as HR's on
+// every bulk endpoint, including bank accounts and every other employee's salary) is the actual
+// security boundary this whole claims model exists to close. Only the new /api/employee/* handler
+// passes 'employee' explicitly.
+export async function requireAuth(req: VercelRequest, requiredRole: SessionClaims['role'] = 'hr'): Promise<AuthResult> {
   const token = tokenFromRequest(req);
   if (!token) return UNAUTHORIZED;
 
@@ -51,7 +72,7 @@ export async function requireAuth(req: VercelRequest): Promise<AuthResult> {
   } catch {
     return UNAUTHORIZED;
   }
-  if (!claims.jti) return UNAUTHORIZED;
+  if (!claims.jti || !claims.session) return UNAUTHORIZED;
 
   try {
     const revoked = await kv.get(`revoked:${claims.jti}`);
@@ -63,7 +84,9 @@ export async function requireAuth(req: VercelRequest): Promise<AuthResult> {
     console.error('[auth] KV lookup for revocation check failed', err);
     return UNAUTHORIZED;
   }
-  return { ok: true };
+
+  if (claims.session.role !== requiredRole) return FORBIDDEN;
+  return { ok: true, claims: claims.session };
 }
 
 export { tokenFromRequest };

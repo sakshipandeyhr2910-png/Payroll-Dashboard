@@ -106,6 +106,30 @@ on top of the uploaded Salary Sheet:
 - **Failure handling**: if the PMS API is unreachable or returns an error, the register falls back to
   the last-known Salary Sheet data and shows a warning note — it never breaks the page.
 
+## Authentication
+
+Two separate login modes, both gated by a real signed session (JWT in production via
+`api/_lib/auth.ts`; an in-memory session map in local dev via `vite-plugins/dashboardAuthPlugin.ts`)
+— neither is a frontend-only check. Every `/api/*` route requires a valid session of the correct
+role; an authenticated session of the wrong role gets a 403, not just a hidden UI element.
+
+- **HR Admin** — the original single shared login (`DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`).
+  Full access to every existing bulk/HR endpoint (all employees, bank details, every entity).
+- **Employee Login** — self-service, no shared credential. An employee enters their **Employee ID**
+  (PMS Emp Code) or **registered email**, receives a 6-digit OTP by email (5-minute expiry, 5
+  incorrect-attempt limit, rate-limited to 5 requests per 15 minutes per employee — see
+  `api/_lib/otpStore.ts` / `vite-plugins/employeeAuthPlugin.ts`), and on successful verification
+  gets a session scoped to exactly their own Emp Code and entity. That scope is embedded in the
+  signed session itself (`SessionClaims` in `api/_lib/auth.ts`) — `/api/employee/*` handlers read
+  it from there, never from a client-supplied parameter, so there is no request an employee session
+  can make to see anyone else's data or reach an HR-only endpoint. Identity resolution (ID/email →
+  employee → dashboard entity) works across every live entity via `api/_lib/employeeLookup.ts`.
+  Currently shows the employee's own PMS profile and Pay Scale — not yet the full per-entity Net
+  Payable breakdown HR's bulk view computes (see `api/_lib/routes/employeePayroll.ts`'s own scope
+  note).
+  - Requires SMTP credentials for the mailbox that sends OTP emails (see "Deploying to Vercel"
+    below, and `.env.example`'s `SMTP_*` block for local dev).
+
 ## Overseas employee routing
 
 Dubai, USA, UK, New Zealand, Australia, Malaysia, Saudi and Canada all pull from one shared PMS
@@ -201,6 +225,10 @@ one:
 - **`DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` — required.** The shared dashboard login, same as
   local dev.
 - **`TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` — required.** From step 2.
+- **`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` — required for Employee
+  Login.** A dedicated shared mailbox (not any one employee's own inbox) that sends OTP emails —
+  see `api/_lib/mailer.ts`. Without these, `/api/employee-auth/request-otp` returns an error
+  instead of silently pretending to send anything.
 - **Per-feature blocks (all optional — a blank block just falls back to static/sample data for
   that feature, same as local dev):**
   - `PMS_API_BASE`, `PMS_USERNAME`, `PMS_PASSWORD`, `PMS_ROLE`, `PMS_API_KEY`

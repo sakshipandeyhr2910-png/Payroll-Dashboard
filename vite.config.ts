@@ -11,6 +11,8 @@ import { rayontaraTdsApiPlugin } from './vite-plugins/rayontaraTdsApiPlugin';
 import { rayontaraLeaveApiPlugin } from './vite-plugins/rayontaraLeaveApiPlugin';
 import { rayontaraArrearApiPlugin } from './vite-plugins/rayontaraArrearApiPlugin';
 import { rayontaraWfhApiPlugin } from './vite-plugins/rayontaraWfhApiPlugin';
+import { employeeAuthPlugin } from './vite-plugins/employeeAuthPlugin';
+import { employeePayrollPlugin } from './vite-plugins/employeePayrollPlugin';
 
 export default defineConfig(({ mode, command }) => {
   // Third arg '' loads ALL vars from .env (not just VITE_-prefixed ones) into this Node-side
@@ -110,6 +112,40 @@ export default defineConfig(({ mode, command }) => {
           role: env.WFH_ROLE,
           apiKey: env.WFH_API_KEY,
         }),
+        employeeAuthPlugin(
+          {
+            base: env.PMS_API_BASE,
+            username: env.PMS_USERNAME,
+            password: env.PMS_PASSWORD,
+            role: env.PMS_ROLE,
+            apiKey: env.PMS_API_KEY,
+          },
+          {
+            host: env.SMTP_HOST,
+            port: Number(env.SMTP_PORT) || 587,
+            user: env.SMTP_USER,
+            password: env.SMTP_PASSWORD,
+            from: env.SMTP_FROM,
+          },
+        ),
+        employeePayrollPlugin(
+          {
+            base: env.PMS_API_BASE,
+            username: env.PMS_USERNAME,
+            password: env.PMS_PASSWORD,
+            role: env.PMS_ROLE,
+            apiKey: env.PMS_API_KEY,
+          },
+          {
+            base: env.APPRAISAL_API_BASE,
+            username: env.APPRAISAL_USERNAME,
+            password: env.APPRAISAL_PASSWORD,
+            role: env.APPRAISAL_ROLE,
+            apiKey: env.APPRAISAL_API_KEY,
+            decryptPassword: env.KITES_DECRYPT_PASSWORD,
+            decryptSalt: env.KITES_DECRYPT_SALT,
+          },
+        ),
       ]),
     ],
     server: {

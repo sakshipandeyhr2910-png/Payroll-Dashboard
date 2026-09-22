@@ -2,36 +2,45 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import LoginPage from './components/LoginPage';
-import { getToken, setToken, clearToken, onLoggedOut, installFetchAuthInterceptor } from './auth';
+import EmployeeDashboard from './components/EmployeeDashboard';
+import { getSession, setSession, clearToken, onLoggedOut, installFetchAuthInterceptor, type LoginResult } from './auth';
 import './styles/index.css';
 
 installFetchAuthInterceptor();
 
 function AuthGate() {
-  const [token, setTokenState] = useState<string | null>(() => getToken());
+  const [session, setSessionState] = useState<LoginResult | null>(() => getSession());
 
-  useEffect(() => onLoggedOut(() => setTokenState(null)), []);
+  useEffect(() => onLoggedOut(() => setSessionState(null)), []);
 
-  if (!token) {
+  if (!session) {
     return (
       <LoginPage
-        onLoggedIn={(t) => {
-          setToken(t);
-          setTokenState(t);
+        onLoggedIn={(result) => {
+          setSession(result);
+          setSessionState(result);
         }}
       />
     );
   }
 
-  return (
-    <App
-      onLogout={() => {
-        fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
-        clearToken();
-        setTokenState(null);
-      }}
-    />
-  );
+  const handleLogout = () => {
+    // Same endpoint for both roles — it just revokes whatever token is presented, regardless of
+    // whether it belongs to an HR or an employee session (see dashboardAuthPlugin.ts/
+    // api/_lib/routes/authLogout.ts). /api/auth/* is deliberately exempted from the fetch
+    // interceptor's auto-attached Authorization header (it's the public login/logout surface), so
+    // this attaches it explicitly — otherwise the server never actually revokes the token, which
+    // would stay valid until the process restarts even after "logging out".
+    fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${session.token}` } }).catch(() => {});
+    clearToken();
+    setSessionState(null);
+  };
+
+  if (session.role === 'employee') {
+    return <EmployeeDashboard employee={session.employee} onLogout={handleLogout} />;
+  }
+
+  return <App onLogout={handleLogout} />;
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

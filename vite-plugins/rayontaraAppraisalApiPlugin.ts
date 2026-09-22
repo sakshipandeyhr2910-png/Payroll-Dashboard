@@ -213,7 +213,7 @@ async function fetchAppraisalForCodes(
   return allResults;
 }
 
-async function fetchAppraisalForKoenig(creds: AppraisalCredentials, codes: number[]): Promise<AppraisalRecord[]> {
+export async function fetchAppraisalForKoenig(creds: AppraisalCredentials, codes: number[]): Promise<AppraisalRecord[]> {
   if (!cachedToken) cachedToken = await fetchToken(creds);
   try {
     return await fetchAppraisalForCodes(creds, cachedToken, codes);

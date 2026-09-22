@@ -109,4 +109,11 @@ async function set(key: string, value: unknown, opts?: SetOptions): Promise<bool
   return true;
 }
 
-export const kv = { get, set };
+// Used for single-use invalidation (an OTP is deleted the moment it's verified, so it can't be
+// replayed) — mirrors Redis `DEL key`.
+async function del(key: string): Promise<void> {
+  await ensureSchema();
+  await getClient().execute({ sql: 'DELETE FROM kv_store WHERE key = ?', args: [key] });
+}
+
+export const kv = { get, set, del };

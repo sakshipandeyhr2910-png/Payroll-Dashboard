@@ -33,6 +33,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const jti = randomBytes(16).toString('hex');
-  const token = signSessionToken(jti);
-  res.status(200).json({ ok: true, token });
+  const token = signSessionToken(jti, { role: 'hr' });
+  res.status(200).json({ ok: true, token, role: 'hr' });
 }

@@ -51,7 +51,7 @@ export interface PmsEmployee {
 // recovered from the OUTGOING request, not the response — we query per known Rayontara code
 // and attach the code we asked for to the record that comes back.
 
-interface TokenState {
+export interface TokenState {
   accessToken: string;
   deviceToken: string;
 }
@@ -62,7 +62,7 @@ interface GetTokenResponse {
   content: { accessToken: string; deviceToken: string; Username: string; Role: string } | null;
 }
 
-type PmsEmployeeRaw = Omit<PmsEmployee, 'code'>;
+export type PmsEmployeeRaw = Omit<PmsEmployee, 'code'>;
 
 interface CommonResponse {
   statuscode: number;
@@ -73,7 +73,7 @@ interface CommonResponse {
 // Cached in-memory for the life of the dev/preview server process — avoids re-authenticating on every page load.
 let cachedToken: TokenState | null = null;
 
-async function fetchToken(creds: PmsCredentials): Promise<TokenState> {
+export async function fetchToken(creds: PmsCredentials): Promise<TokenState> {
   const res = await fetch(`${creds.base}/api/Kites/Operator/GetToken`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -101,7 +101,7 @@ function parseEmployeeContent(content: CommonResponse['content']): PmsEmployeeRa
   return [];
 }
 
-async function fetchEmployeeByCode(
+export async function fetchEmployeeByCode(
   creds: PmsCredentials,
   token: TokenState,
   code: number,
@@ -141,7 +141,7 @@ async function fetchRayontaraEmployees(creds: PmsCredentials): Promise<PmsEmploy
 
 // Confirmed live: Is_rayontara/Is_oversease use "true"/"false" strings, but Is_global uses
 // "Yes"/"No" instead — same boolean meaning, different encoding, so both are accepted here.
-function toBool(v: string | null | undefined): boolean {
+export function toBool(v: string | null | undefined): boolean {
   if (typeof v !== 'string') return false;
   const s = v.trim().toLowerCase();
   return s === 'true' || s === 'yes';
@@ -249,7 +249,7 @@ function normalizeDoj(iso: string | null): string {
   return iso ? iso.slice(0, 10) : '';
 }
 
-interface CodeUniverse {
+export interface CodeUniverse {
   // Plain full-name match — works whenever a name is unique across every scanned code.
   nameToCodes: Map<string, number[]>;
   // name+DOJ composite match — resolves the common case where two *different* real employees
@@ -341,7 +341,7 @@ async function scanCodeUniverse(creds: PmsCredentials, token: TokenState): Promi
 // API calls) that it should only ever run once, not on every page load.
 let cachedCodeUniverse: Promise<CodeUniverse> | null = null;
 
-async function getCodeUniverse(creds: PmsCredentials): Promise<CodeUniverse> {
+export async function getCodeUniverse(creds: PmsCredentials): Promise<CodeUniverse> {
   if (cachedCodeUniverse) return cachedCodeUniverse;
   const run = (async () => {
     if (!cachedToken) cachedToken = await fetchToken(creds);
