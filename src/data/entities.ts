@@ -2,7 +2,7 @@ import type { Entity } from '../types';
 
 export const ENTITIES: Entity[] = [
   {
-    slug: 'koenig', name: 'Koenig', full: 'Koenig India', currency: 'INR',
+    slug: 'koenig', name: 'Koenig India', full: 'Koenig India', currency: 'INR',
     headcount: 1450, white: 1300, blue: 150, active: 1310, resigned: 100, terminated: 40, source: 'sample',
     notes: '<b>Koenig (India)</b> is the primary operating entity. Professional Tax applies per registered work location: ₹200/month (₹300 in February) for Bangalore, ₹209/month for Chennai (BR-07–BR-09). Full statutory deductions apply — EPF (₹1,800 fixed where Basic ≥ ₹15,000), ESI (0.75% of Gross where Gross ≤ ₹21,000), VPF and NPS (10% Old / 14% New regime). The Payroll Register below is built directly from the PMS employee-master API — every employee is shown, live.',
   },

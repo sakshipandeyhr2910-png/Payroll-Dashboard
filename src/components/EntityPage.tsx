@@ -81,6 +81,12 @@ export default function EntityPage({
   // The two fetches are independent so a failure in one (e.g. Appraisal API down) degrades only
   // its own columns to "—" rather than blocking the employee-details rows entirely.
   const RAYONTARA_LIVE_SYNC_ENABLED = true;
+  // Bumped exclusively by the explicit "Update Employee List" click below — same pattern as
+  // koenigRefreshTrigger/globalRefreshTrigger/overseasRefreshTrigger, added because Rayontara
+  // previously had no way to force a re-pull at all: its fetch effects only ever depended on
+  // entity.slug, so staying on the page and clicking a (nonexistent) refresh button did nothing,
+  // and an already-frozen month's snapshot had no force-overwrite path to actually show fresh data.
+  const [liveRefreshTrigger, setLiveRefreshTrigger] = useState(0);
   const [liveEmployees, setLiveEmployees] = useState<PmsEmployee[] | null>(null);
   const [liveAppraisal, setLiveAppraisal] = useState<AppraisalRecord[] | null>(null);
   const [liveLoans, setLiveLoans] = useState<LoanAdvanceRecord[] | null>(null);
@@ -158,7 +164,7 @@ export default function EntityPage({
     return () => {
       cancelled = true;
     };
-  }, [entity.slug]);
+  }, [entity.slug, liveRefreshTrigger]);
 
   // The Recovery Panel API is month-scoped (each deduction belongs to a specific payroll month),
   // unlike the other three sources — so it needs its own effect keyed on selectedMonth, refetching
@@ -186,7 +192,7 @@ export default function EntityPage({
     return () => {
       cancelled = true;
     };
-  }, [entity.slug, selectedMonth]);
+  }, [entity.slug, selectedMonth, liveRefreshTrigger]);
 
   // Employee TDS Details is also month-scoped, per employee code — a blank query returns nothing
   // (confirmed live), but a specific EmpCode returns that employee's full monthly TDS history, so
@@ -214,7 +220,7 @@ export default function EntityPage({
     return () => {
       cancelled = true;
     };
-  }, [entity.slug, selectedMonth]);
+  }, [entity.slug, selectedMonth, liveRefreshTrigger]);
 
   // Employee Leave Details is also month-scoped, per employee code — requires both a specific
   // EmpCode AND a specific Month in the request itself (unlike TDS/Recovery, which filter
@@ -1590,7 +1596,9 @@ export default function EntityPage({
   // Meal/Recovery for Koenig/Global don't (see EntityPage.tsx's other fetch effects), so those two
   // specifically could in rare cases still race on a force-overwrite — a real but much smaller gap
   // than the one this fixes.
-  const nothingLoadingForForceOverwrite = entity.slug === 'koenig'
+  const nothingLoadingForForceOverwrite = entity.slug === 'rayontara'
+    ? !liveLoading
+    : entity.slug === 'koenig'
     ? !(koenigLoading || koenigAppraisalLoading || koenigLoanLoading || koenigTdsLoading || koenigLeaveLoading || koenigArrearLoading)
     : entity.slug === 'global'
       ? !(globalLoading || globalAppraisalLoading || globalLoanLoading || globalTdsLoading || globalArrearLoading)
@@ -1898,6 +1906,19 @@ export default function EntityPage({
           <button className="pill-btn">
             {hasMultipleCurrencies ? 'Currencies' : 'Currency'}: {payoutCurrencies.join(' & ')}
           </button>
+          {isRayontara && (
+            <button
+              className="pill-btn"
+              disabled={liveLoading}
+              onClick={() => {
+                forceSnapshotOverwrite.current = true;
+                setLiveRefreshTrigger((n) => n + 1);
+              }}
+              title="Re-fetch the employee list and all linked API data from scratch"
+            >
+              {liveLoading ? 'Updating…' : 'Update Employee List'}
+            </button>
+          )}
           {isKoenig && (
             <button
               className="pill-btn"
