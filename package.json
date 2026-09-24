@@ -8,11 +8,13 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck:api": "tsc --noEmit -p tsconfig.api.json",
-    "warm-code-universe": "tsx scripts/warmCodeUniverse.ts"
+    "warm-code-universe": "tsx scripts/warmCodeUniverse.ts",
+    "capture-payroll-snapshots": "tsx scripts/capturePayrollSnapshots.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
     "jsonwebtoken": "^9.0.3",
+    "jspdf": "^4.2.1",
     "nodemailer": "^10.0.10",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -26,6 +28,7 @@
     "@types/react-dom": "^18.3.1",
     "@vercel/node": "^13.0.0",
     "@vitejs/plugin-react": "^4.3.3",
+    "playwright": "^1.49.0",
     "tsx": "^4.23.13",
     "typescript": "^5.6.3",
     "vite": "^5.4.10"

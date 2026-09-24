@@ -2,22 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Entity, CategoryFilter, PayrollRow } from '../types';
 import { ENTITY_ROWS } from '../data/entityRows';
 import { PAYROLL_COLS } from '../data/payrollColumns';
-import { fmt, toCalcNumber } from '../utils/format';
+import { fmt } from '../utils/format';
 import { BASE_MONTH, monthLabel, sampleFactor, applyMonthFactor, isMonthCompleted } from '../utils/month';
 import { fetchSnapshot, saveSnapshot } from '../utils/snapshotApi';
-import { weekdaysInMonth, presentDaysForMonth, hasJoinedByMonth } from '../utils/attendance';
-import { professionalTaxForLocation } from '../utils/professionalTax';
+import { computeEntityRows } from '../utils/computeEntityRows';
 import { downloadXlsx } from '../utils/xlsxExport';
 import { fetchRayontaraLiveEmployees, type PmsEmployee } from '../utils/rayontaraLiveApi';
 import { fetchRayontaraAppraisal, type AppraisalRecord } from '../utils/rayontaraAppraisalApi';
 import { fetchRayontaraLoans, type LoanAdvanceRecord } from '../utils/rayontaraLoanApi';
-import { totalLoanDeductionForMonth } from '../utils/loanDeduction';
 import { fetchRayontaraMealAllowances, type MealAllowanceRecord } from '../utils/rayontaraMealApi';
 import { fetchRayontaraRecovery, type RecoveryRecord } from '../utils/rayontaraRecoveryApi';
 import { fetchRayontaraTds, type TdsRecord } from '../utils/rayontaraTdsApi';
 import { fetchRayontaraLeave, type LeaveRecord } from '../utils/rayontaraLeaveApi';
 import { fetchRayontaraArrear, type ArrearRecord } from '../utils/rayontaraArrearApi';
-import { appraisalArrearForMonth, payScaleForMonth } from '../utils/arrearCalculation';
 import { buildRayontaraLiveRows } from '../utils/rayontaraLiveRows';
 import { fetchKoenigLiveEmployees, type KoenigEmployeeRaw } from '../utils/koenigLiveApi';
 import { fetchKoenigAppraisal } from '../utils/koenigAppraisalApi';
@@ -39,6 +36,7 @@ import MonthControl from './MonthControl';
 import CategoryChips from './CategoryChips';
 import CurrencyChips, { type CurrencyFilterValue } from './CurrencyChips';
 import PayrollTable from './PayrollTable';
+import PayrollArchive from './PayrollArchive';
 
 // Explicit per-employee entity override, same "confirmed exception, not a policy change" reasoning
 // as CURRENCY_CORRECTIONS in koenigLiveRows.ts. Imran Sheikh (3287) is Global population in PMS
@@ -51,6 +49,13 @@ import PayrollTable from './PayrollTable';
 const EMPLOYEE_ENTITY_OVERRIDE: Record<number, string> = {
   3287: 'dubai',
 };
+
+// Marisa Mercado (3301) resigned on 2024-11-04 (confirmed via her PMS per-code record — see
+// withMatchedCode in codeUniverseMatch.ts, which fixed her row showing as still-active due to a
+// bulk-API data gap) — at explicit request she's excluded from Koenig's Payroll Register entirely,
+// unlike every other resigned employee (who still appear there, correctly flagged with Salary
+// Hold/a resignation remark, per normal behavior). Scoped to this one code only.
+const EXCLUDED_EMPLOYEE_CODES = new Set<number>([3301]);
 
 interface Props {
   entity: Entity;
@@ -73,6 +78,7 @@ export default function EntityPage({
 }: Props) {
   const isBaseMonth = selectedMonth === BASE_MONTH;
   const staticRows = ENTITY_ROWS[entity.slug] || [];
+  const [showPayrollArchive, setShowPayrollArchive] = useState(false);
 
   // Rayontara's Payroll Register is built from two independent live sources: the PMS
   // employee-details API (name, designation, bank details, DOJ, UAN, location) and the
@@ -1228,7 +1234,9 @@ export default function EntityPage({
       return liveEmployees ? buildRayontaraLiveRows(liveEmployees, appraisalByCode) : staticRows;
     }
     if (entity.slug === 'koenig') {
-      return koenigEmployees ? buildKoenigLiveRows(koenigEmployees, appraisalByCode, entity.currency) : staticRows;
+      if (!koenigEmployees) return staticRows;
+      const rows = buildKoenigLiveRows(koenigEmployees, appraisalByCode, entity.currency);
+      return rows.filter((r) => !EXCLUDED_EMPLOYEE_CODES.has(r.code));
     }
     if (entity.slug === 'global') {
       if (!globalEmployees) return staticRows;
@@ -1306,176 +1314,24 @@ export default function EntityPage({
     // Renamed from the column's own value: this is purely the calendar-derived denominator used
     // for the per-day Salary rate below — the "Total Working Days" column itself is now a
     // separate, derived figure (see totalWorkingDays further down), not this calendar constant.
-    const calendarTotalDays = weekdaysInMonth(selectedMonth);
-    return scaled.map((r) => {
-      const totalDaysAfterLeaveTaken = presentDaysForMonth(r.dojRaw, selectedMonth);
-      const gross = r.payScaleAmount !== undefined && totalDaysAfterLeaveTaken !== undefined && calendarTotalDays > 0
-        ? Math.round((payScaleForMonth(arrearByCode.get(r.code), selectedMonth, r.payScaleAmount) / calendarTotalDays) * totalDaysAfterLeaveTaken * 100) / 100
-        : r.gross;
-      const round2 = (n: number) => Math.round(n * 100) / 100;
-      // ESI and PF are India-specific statutory deductions (EPF/ESI/PT do not apply overseas, per
-      // every overseas entity's own notes) — scoped to Koenig/Rayontara/Global even though the same
-      // live Appraisal API also returns an EPF figure for overseas employees now that Pay Scale is
-      // wired up for them (see overseasLiveRows.ts). Only Salary derives from Pay Scale for every
-      // entity — ESI and PF stay "—" for overseas.
-      const isAppraisalPfEntity = entity.slug === 'koenig' || entity.slug === 'rayontara' || entity.slug === 'global';
-      const esi = r.payScaleAmount !== undefined && isAppraisalPfEntity
-        ? (r.payScaleAmount < 21000 ? round2(gross * 0.0075) : 0)
-        : r.esi;
-      // PF proration: the Appraisal Master API returns a flat ₹1800 for most employees regardless
-      // of days actually worked — correct once someone's been present the full month, but
-      // overstated for a brand-new joiner's partial first month. Only the ₹1800 bucket is
-      // touched — ₹0 and any custom fixed amount pass through exactly as the API returned them.
-      const pf = isAppraisalPfEntity && r.pf === 1800 && totalDaysAfterLeaveTaken !== undefined && calendarTotalDays > 0
-        ? (totalDaysAfterLeaveTaken === calendarTotalDays
-            ? r.pf // present the whole month (joined in an earlier month) — no proration
-            : Math.round((1800 / calendarTotalDays) * totalDaysAfterLeaveTaken))
-        : r.pf;
-      // Loan Advance, Meal Card and Recovery Panel are all company-wide bulk sources, so they
-      // apply to any row with a real (not sample-data) Emp Code — Rayontara's known codes or
-      // Koenig's recovered ones. A Koenig row whose code couldn't be confidently recovered (NaN)
-      // can't be looked up at all — that's an unknown identity, not a confirmed "no record", so
-      // it shows "—" rather than 0.
-      const isRealCodeEntity = entity.slug === 'rayontara' || entity.slug === 'koenig' || entity.slug === 'global';
-      const hasRealCode = isRealCodeEntity && !Number.isNaN(r.code);
-      // Loan Amount and Appraisal Arrear are scoped to ALL 8 overseas entities (Dubai included, as
-      // of this explicit request — previously excluded) — kept as their own flag rather than
-      // folded into isRealCodeEntity/hasRealCode above so Meal/TDS stay untouched (still
-      // Koenig/Rayontara/Global only; not requested for any overseas entity).
-      const isLoanScopedEntity = isRealCodeEntity || isOverseasEntity;
-      const hasRealCodeForLoan = isLoanScopedEntity && !Number.isNaN(r.code);
-      const employeeLoans = loansByCode.get(r.code);
-      const loan = hasRealCodeForLoan
-        ? (employeeLoans ? totalLoanDeductionForMonth(employeeLoans, selectedMonth) : 0)
-        : isLoanScopedEntity ? NaN : r.loan;
-      const mealpass = hasRealCode
-        ? (mealsByCode.get(r.code) ?? 0)
-        : isRealCodeEntity ? NaN : r.mealpass;
-      // Recovery Panel (VPF/TA-DA/Recovery) is ALSO scoped to Dubai specifically per this explicit
-      // request — the other 7 overseas entities weren't asked for it and stay unwired (their
-      // columns are hidden anyway — see OVERSEAS_NON_DUBAI_HIDDEN_COLS). VPF itself stays hidden
-      // on Dubai too (see DUBAI_HIDDEN_COLS) even though it's computed here alongside TA-DA/Recovery
-      // — all three come from the same Recovery Panel record, so there's no separate call to skip.
-      const isRecoveryScopedEntity = isRealCodeEntity || entity.slug === 'dubai';
-      const hasRealCodeForRecovery = isRecoveryScopedEntity && !Number.isNaN(r.code);
-      const recoveryRecord = recoveryByCode.get(r.code);
-      const vpf = hasRealCodeForRecovery ? (recoveryRecord?.vpf ?? 0) : isRecoveryScopedEntity ? NaN : r.vpf;
-      const tada = hasRealCodeForRecovery ? (recoveryRecord?.tada ?? 0) : isRecoveryScopedEntity ? NaN : r.tada;
-      const recovery = hasRealCodeForRecovery ? (recoveryRecord?.recovery ?? 0) : isRecoveryScopedEntity ? NaN : r.recovery;
-      // WFH Infra Reimbursement is Global-DMCC-only (FR-30 / BR-17), from the WFH_Infra_Reimbursement
-      // API (api_key 17), matched by Emp Code (the API's own `RequestedBy` field) and the selected
-      // month via each request's Request Date — same "known zero, not unknown" reasoning as
-      // Loan/Meal/Recovery/TDS above: no approved reimbursement on file for this employee this month
-      // is a real, known 0, not an unknown. Every other entity keeps its existing WFH Reimbursement
-      // figure (sample entities have a static value; Koenig/Rayontara have none, so it stays NaN —
-      // see koenigLiveRows.ts/rayontaraLiveRows.ts). Its Accessories text (what was actually
-      // claimed, e.g. "Internet and landline") is folded into Remarks below, not a separate column.
-      const isWfhScopedEntity = entity.slug === 'global';
-      const wfhRecord = isWfhScopedEntity && hasRealCode ? wfhByCode.get(r.code) : undefined;
-      const remarks = [
-        r.remarks,
-        hasRealCodeForRecovery ? recoveryRecord?.remarks : undefined,
-        wfhRecord?.remarks,
-      ].filter(Boolean).join(' | ');
-      const tds = hasRealCode ? (tdsByCode.get(r.code) ?? 0) : isRealCodeEntity ? NaN : r.tds;
-      // Leave Days is scoped to Koenig, Rayontara and Global — Taken Leaves from the Employee
-      // Leave Details API, matched by Emp Code and the selected month. "No leave record for this
-      // employee this month" is a real, known zero (same reasoning as Loan/Meal/Recovery/TDS
-      // above), not an unknown — except when the Emp Code itself couldn't be matched, which stays
-      // "—". Every other entity keeps the existing DOJ-derived Total Days − Total Days After
-      // Leave Taken figure, computed below.
-      const isLeaveScopedEntity = entity.slug === 'koenig' || entity.slug === 'rayontara' || entity.slug === 'global';
-      // Appraisal Arrear is scoped to Koenig, Rayontara, Global, and (as of this explicit request,
-      // Dubai now included) all 8 overseas entities — (New Salary − Old Salary) × pending months,
-      // shown only in the month the appraisal was actually processed (see
-      // utils/arrearCalculation.ts). An employee with no arrear record, or whose Emp Code couldn't
-      // be matched, both show 0/— same reasoning as every other arrear-scoped column above.
-      const isArrearScopedEntity = entity.slug === 'koenig' || entity.slug === 'rayontara' || entity.slug === 'global' || isOverseasEntity;
-      const appraisalArrear = isArrearScopedEntity
-        ? (hasRealCodeForLoan ? appraisalArrearForMonth(arrearByCode.get(r.code), selectedMonth) : NaN)
-        : r.appraisalArrear;
-      const pt = professionalTaxForLocation(r.location);
-      const wfh = isWfhScopedEntity
-        ? (hasRealCode ? (wfhRecord?.amount ?? 0) : NaN)
-        : r.wfh;
-      // Net Payable = Salary − (PF + ESI + Loan + TDS + NPS) + (Arrear + Overtime)
-      //             − (DA + VPF + TA/DA + Recovery + Professional Tax) + Appraisal Arrear − Meal Passes
-      //             + Commission + WFH Reimbursement.
-      // Applied to every row of every entity using each row's own (possibly just-recomputed above)
-      // column values. A missing deduction/allowance line item contributes 0, like a blank cell
-      // in a spreadsheet formula — but Salary itself is the base the whole figure is built on, not
-      // a line item, so an unknown Salary (e.g. Koenig/Rayontara rows the PMS API covers but the
-      // Appraisal API doesn't) makes the whole Net Payable unknown too, rather than emitting a
-      // deduction-only negative number that implies a real payout was computed.
-      const net = Number.isNaN(gross) ? NaN : round2(
-        toCalcNumber(gross)
-          - (toCalcNumber(pf) + toCalcNumber(esi) + toCalcNumber(loan) + toCalcNumber(tds) + toCalcNumber(r.nps))
-          + (toCalcNumber(r.arrear) + toCalcNumber(r.overtime))
-          - (toCalcNumber(r.da) + toCalcNumber(vpf) + toCalcNumber(tada) + toCalcNumber(recovery) + toCalcNumber(pt))
-          + toCalcNumber(appraisalArrear)
-          - toCalcNumber(mealpass)
-          + toCalcNumber(r.commission)
-          + toCalcNumber(wfh)
-      );
-      // How many of this month's working days fell before the employee's DOJ (or after, if not
-      // yet joined) — NaN when totalDaysAfterLeaveTaken itself is unknown, same as every other
-      // DOJ-derived figure. Koenig/Rayontara override this with the real Taken Leaves value from
-      // the Employee Leave Details API instead (see isLeaveScopedEntity above).
-      const leaveDays = isLeaveScopedEntity
-        ? (hasRealCode ? (leaveByCode.get(r.code) ?? 0) : NaN)
-        : (totalDaysAfterLeaveTaken !== undefined ? calendarTotalDays - totalDaysAfterLeaveTaken : NaN);
-      // Total Working Days = Present Days − Leave Days, applied to every entity per explicit
-      // request (replaces the previous flat calendar-weekdays figure as the displayed value).
-      const totalWorkingDays = totalDaysAfterLeaveTaken !== undefined && !Number.isNaN(leaveDays)
-        ? totalDaysAfterLeaveTaken - leaveDays
-        : NaN;
-      return {
-        ...r,
-        totalDays: totalWorkingDays,
-        presentDays: totalDaysAfterLeaveTaken,
-        totalDaysAfterLeaveTaken,
-        leaveDays,
-        gross,
-        mealpass,
-        basic: round2(gross * 0.5),
-        hra: round2(gross * 0.25),
-        clubSpecialAllowance: round2(gross * 0.25),
-        esi,
-        pf,
-        loan,
-        pt,
-        vpf,
-        tada,
-        recovery,
-        remarks,
-        tds,
-        net,
-        wfh,
-        appraisalArrear,
-        // Koenig and Rayontara use the PMS API's own working_days field per employee (matched by
-        // Emp Code via r.workingDaysPerWeek, set in koenigLiveRows.ts/rayontaraLiveRows.ts) rather
-        // than the Blue/White inference below — confirmed live to be more precise (e.g. "Care
-        // taker" shows 7 days, not the inferred 6). Every other entity (including Global, which
-        // reuses buildKoenigLiveRows and so also carries a real API value) keeps the existing
-        // category-based figure unchanged, per explicit scope.
-        workingDaysPerWeek: (entity.slug === 'koenig' || entity.slug === 'rayontara') && r.workingDaysPerWeek !== undefined
-          ? r.workingDaysPerWeek
-          : (r.category === 'Blue' ? 6 : 5),
-        // Koenig and Rayontara classify Category from the PMS API's own Is_blue_collared_job flag
-        // per employee (matched by Emp Code via r.isBlueCollarJob, set in
-        // koenigLiveRows.ts/rayontaraLiveRows.ts), OR'd with the designation-based inference
-        // already on r.category. Confirmed live: Is_blue_collared_job is "No" for every single
-        // employee company-wide — including Cooks, Drivers, Housekeeping and Care takers — so
-        // trusting it alone would misclassify every real Blue Collar employee as White. The OR
-        // means the API flag is honored the moment Koenig actually sets it true for someone, while
-        // real blue-collar staff are still correctly marked today via their designation. Every
-        // other entity (including Global, which reuses buildKoenigLiveRows) keeps the existing
-        // designation-inferred category unchanged.
-        category: (entity.slug === 'koenig' || entity.slug === 'rayontara') && (r.isBlueCollarJob || r.category === 'Blue')
-          ? 'Blue'
-          : (entity.slug === 'koenig' || entity.slug === 'rayontara') ? 'White' : r.category,
-      };
-    }).filter((r) => hasJoinedByMonth(r.dojRaw, selectedMonth));
+    // The actual Net Payable computation (Salary/PF/ESI/Loan/TDS/NPS/VPF/TA-DA/Recovery/
+    // Professional Tax/Appraisal Arrear/Meal Passes/WFH, per-entity scoping flags, category/
+    // working-days overrides) lives in utils/computeEntityRows.ts — extracted so
+    // scripts/capturePayrollSnapshots.ts (the automatic month-end snapshot job backing the
+    // "Payroll" archive card) computes rows exactly the same way this page does, from one
+    // place, rather than a second implementation that could quietly drift from what's shown here.
+    return computeEntityRows({
+      rawRows: scaled,
+      entitySlug: entity.slug,
+      selectedMonth,
+      loansByCode,
+      mealsByCode,
+      recoveryByCode,
+      tdsByCode,
+      leaveByCode,
+      wfhByCode,
+      arrearByCode,
+    });
   }, [entity.slug, entity.source, rawRows, selectedMonth, loansByCode, mealsByCode, recoveryByCode, tdsByCode, leaveByCode, wfhByCode, arrearByCode, rayontaraIsLive, koenigIsLive, globalIsLive, overseasIsLive]);
 
   // Month-end freeze (live entities only — Koenig/Rayontara/Global; sample entities are already
@@ -1633,11 +1489,18 @@ export default function EntityPage({
 
   const periodNoteText = useMemo(() => {
     if (isBaseMonth) return null;
+    // Both branches below predate this entity having a live PMS feed at all — Rayontara's
+    // "only the uploaded Salary Sheet exists" and every other entity's "illustrative sample
+    // figures" messages are both about static/scaled placeholder data. Once an entity is
+    // genuinely live (entityIsLiveNow), selectedMonth's rows are real per-month PMS data, so
+    // neither disclaimer applies regardless of what entity.source (a static, pre-live config
+    // field) says.
+    if (entityIsLiveNow) return null;
     if (entity.source === 'live') {
       return `⚑ No uploaded payroll data for ${monthLabel(selectedMonth)} — showing the actual Salary Sheet you provided (${monthLabel(BASE_MONTH)}), the only period on file.`;
     }
     return `ⓘ Showing illustrative sample figures adjusted for ${monthLabel(selectedMonth)}. Only ${monthLabel(BASE_MONTH)} reflects this dashboard's baseline sample data.`;
-  }, [isBaseMonth, entity.source, selectedMonth]);
+  }, [isBaseMonth, entity.source, selectedMonth, entityIsLiveNow]);
 
   // Derived from the rows actually being displayed (rowsForMonth), not the static
   // utils/currencies.ts helper — that helper only ever looks at the static sample data in
@@ -1968,9 +1831,22 @@ export default function EntityPage({
               {overseasLoading ? 'Updating…' : 'Update Employee List'}
             </button>
           )}
+          <button className="pill-btn" onClick={() => setShowPayrollArchive(true)}>Payroll</button>
           <button className="pill-btn green" onClick={() => downloadXlsx(entity, filteredRows, visibleColumns)}>Export to Excel</button>
         </div>
       </div>
+      {showPayrollArchive && (
+        <PayrollArchive
+          entity={entity}
+          columns={visibleColumns}
+          selectedMonth={selectedMonth}
+          entityIsLiveNow={entityIsLiveNow}
+          monthIsCompleted={monthIsCompleted}
+          snapshotStatus={snapshotStatus}
+          rows={rowsForMonth}
+          onClose={() => setShowPayrollArchive(false)}
+        />
+      )}
       <hr className="hr-divider" />
 
       <div className="kpi-grid">

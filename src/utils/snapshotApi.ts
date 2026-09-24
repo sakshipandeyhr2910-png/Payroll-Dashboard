@@ -35,6 +35,7 @@ export async function fetchSnapshot(entitySlug: string, month: string): Promise<
   }
 }
 
+
 export type SnapshotSaveResult =
   | { ok: true; rows: PayrollRow[] } // the rows now on file — same as sent, unless someone else's request won the race first
   | { ok: false; error: string };

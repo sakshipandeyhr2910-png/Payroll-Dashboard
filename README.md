@@ -265,3 +265,21 @@ created in step 2.
 3. After that first manual run, it also runs automatically on the schedule in the workflow file
    (daily at 03:00 UTC by default) to pick up newly-joined employees — adjust the cron if the
    roster changes fast enough that a day-old cache becomes a problem.
+
+### 5. Set up the `capture-payroll-snapshots` GitHub Action
+
+The "Payroll" card on each entity page lets HR download an immutable snapshot of any past month.
+Those snapshots normally freeze themselves the moment any HR session views a completed month (see
+`EntityPage.tsx`'s freeze effect) — but that depends on someone actually opening the dashboard
+after month-end. `scripts/capturePayrollSnapshots.ts` and
+`.github/workflows/capture-payroll-snapshots.yml` remove that dependency: the workflow logs into
+the deployed dashboard as HR and visits every entity page itself, so the freeze happens
+automatically every month regardless of whether a human does.
+
+1. In the GitHub repo's **Settings → Secrets and variables → Actions**, add these repo secrets:
+   `DASHBOARD_URL` (the deployed site, e.g. `https://payroll-dashboard.vercel.app`),
+   `DASHBOARD_USERNAME`, `DASHBOARD_PASSWORD` (the same two from step 3).
+2. That's it — no manual first run required. It runs daily at 00:05 IST; the first run after a
+   month rolls over does the real freeze, every run after that for the same month confirms it's
+   already frozen and does nothing (safe to also trigger manually via **Actions** →
+   **Capture monthly payroll snapshots** → **Run workflow**).

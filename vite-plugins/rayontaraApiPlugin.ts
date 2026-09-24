@@ -419,12 +419,30 @@ function matchEmployeeCode(e: PmsEmployeeRaw, universe: CodeUniverse): number | 
   return null;
 }
 
+// Confirmed live: the bulk "get all employees" endpoint (emp_code:"") can return a severely
+// truncated record for a given employee — e.g. code 3301 came back from bulk with designation,
+// department, manager, city, address, bank details AND date_of_resigantion/last_working_day all
+// null, showing as a currently-active employee with no other details, while querying that same
+// code individually (emp_code:"3301") returned her complete record, including that she resigned
+// on 2024-11-04. getCodeUniverse's scan already queried every code individually to build
+// codeDetails — reusing that per-code record here, once a bulk row is matched to a code, needs no
+// extra PMS calls and fixes this at the source rather than only in whichever one field
+// (resignation status, in this case) happened to get noticed missing.
+function withMatchedCode<T extends PmsEmployeeRaw>(e: T, universe: CodeUniverse): PmsEmployeeRaw & { code: number | null } {
+  const code = matchEmployeeCode(e, universe);
+  if (code !== null) {
+    const details = universe.codeDetails.get(code);
+    if (details) return details;
+  }
+  return { ...e, code };
+}
+
 async function fetchKoenigEmployeesWithCodes(creds: PmsCredentials): Promise<KoenigEmployeeWithCode[]> {
   const [employees, universe] = await Promise.all([
     fetchKoenigEmployees(creds),
     getCodeUniverse(creds),
   ]);
-  return employees.map((e) => ({ ...e, code: matchEmployeeCode(e, universe) }));
+  return employees.map((e) => withMatchedCode(e, universe));
 }
 
 // Global = Is_global=true (or "Yes" — the API encodes this flag differently from
@@ -453,7 +471,7 @@ async function fetchGlobalEmployeesWithCodes(creds: PmsCredentials): Promise<Koe
     fetchGlobalEmployees(creds),
     getCodeUniverse(creds),
   ]);
-  return employees.map((e) => ({ ...e, code: matchEmployeeCode(e, universe) }));
+  return employees.map((e) => withMatchedCode(e, universe));
 }
 
 // Overseas = Is_oversease=true, independent of Is_global (confirmed live: these are two disjoint
@@ -482,7 +500,7 @@ async function fetchOverseasEmployeesWithCodes(creds: PmsCredentials): Promise<K
     fetchOverseasEmployees(creds),
     getCodeUniverse(creds),
   ]);
-  return employees.map((e) => ({ ...e, code: matchEmployeeCode(e, universe) }));
+  return employees.map((e) => withMatchedCode(e, universe));
 }
 
 function registerMiddleware(server: ViteDevServer | PreviewServer, creds: PmsCredentials) {

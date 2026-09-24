@@ -1,0 +1,45 @@
+name: Capture monthly payroll snapshots
+
+# Runs scripts/capturePayrollSnapshots.ts, which logs into the deployed dashboard as HR and visits
+# every entity page — the same visit that already triggers EntityPage.tsx's own month-end freeze
+# (first-write-wins POST /api/snapshot/:entity/:month) when a human HR user does it. This just makes
+# sure that visit happens every month even if nobody in HR opens the dashboard right after month-end.
+#
+# Scheduled daily rather than "once, exactly on the last day" — isMonthCompleted (utils/month.ts) is
+# true for last month on every day of the new month, and the server enforces first-write-wins, so a
+# daily run is idempotent: the first run after a month rolls over does the real freeze, every run
+# after that for the same month confirms it's already frozen and does nothing. A missed run
+# self-heals the next day instead of silently losing a month.
+#
+# Requires DASHBOARD_URL (the deployed site, e.g. https://payroll-dashboard.vercel.app) plus the
+# same DASHBOARD_USERNAME/DASHBOARD_PASSWORD already configured in Vercel for HR login — add all
+# three as repo secrets before this can run.
+
+on:
+  schedule:
+    # Daily at 00:05 IST (18:35 UTC the previous day) — promptly after midnight on whichever day
+    # the current month rolls over.
+    - cron: '35 18 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  capture-snapshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run capture-payroll-snapshots script
+        run: npm run capture-payroll-snapshots
+        env:
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+          DASHBOARD_USERNAME: ${{ secrets.DASHBOARD_USERNAME }}
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}

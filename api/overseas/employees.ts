@@ -3,7 +3,7 @@ import { requireAuth } from '../_lib/auth';
 import { kv } from '../_lib/kv';
 import { refreshCachedToken, withCachedToken } from '../_lib/tokenCache';
 import { fetchAllOverseasEmployees, fetchToken, type PmsCredentials, type PmsEmployeeRaw } from '../_lib/pmsClient';
-import { matchEmployeeCode, type SerializedCodeUniverse } from '../_lib/codeUniverseMatch';
+import { withMatchedCode, type SerializedCodeUniverse } from '../_lib/codeUniverseMatch';
 
 // Ported from vite-plugins/rayontaraApiPlugin.ts's '/api/overseas/employees' handler — same PMS
 // credentials/token cache and bulk endpoint as Koenig/Global, filtered to Is_oversease=true
@@ -51,7 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const withCodes: OverseasEmployeeWithCode[] = employees.map((e) => ({ ...e, code: matchEmployeeCode(e, universe) }));
+    const withCodes: OverseasEmployeeWithCode[] = employees.map((e) => withMatchedCode(e, universe));
     const matched = withCodes.filter((e) => e.code !== null).length;
     res.status(200).json({ ok: true, employees: withCodes, matched, total: withCodes.length });
   } catch (err) {

@@ -21,7 +21,11 @@ function exportCellValue(row: PayrollRow, key: PayrollColumn['key']): string | n
 // PayrollTable.tsx is rendering — rather than a static pre-baked sample file, so what a user
 // downloads always matches what they were just looking at (live API data for Koenig/Rayontara,
 // the entity's own sample data otherwise).
-export function downloadXlsx(entity: Entity, rows: PayrollRow[], columns: PayrollColumn[]): void {
+// `fileLabel` optionally names the specific archived month this export represents (e.g.
+// "August_2026", from the Payroll archive card) — appended to the filename so a downloaded past
+// month is never confused with another, or with a live "Export to Excel" of the currently-viewed
+// month. Omitted, the filename is exactly as before this existed.
+export function downloadXlsx(entity: Entity, rows: PayrollRow[], columns: PayrollColumn[], fileLabel?: string): void {
   const header = ['Emp Code', 'Employee Name', ...columns.map((c) => c.label)];
   const data: (string | number)[][] = rows.map((row) => [
     Number.isNaN(row.code) ? '—' : row.code,
@@ -32,5 +36,6 @@ export function downloadXlsx(entity: Entity, rows: PayrollRow[], columns: Payrol
   const worksheet = XLSX.utils.aoa_to_sheet([header, ...data]);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, entity.name.slice(0, 31));
-  XLSX.writeFile(workbook, `Salary_Sheet_${entity.full.replace(/\s+/g, '_')}.xlsx`);
+  const suffix = fileLabel ? `_${fileLabel}` : '';
+  XLSX.writeFile(workbook, `Salary_Sheet_${entity.full.replace(/\s+/g, '_')}${suffix}.xlsx`);
 }

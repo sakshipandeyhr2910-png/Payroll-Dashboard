@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { EmployeeIdentity } from '../auth';
 import MonthControl from './MonthControl';
 import { currentMonth } from '../utils/month';
+import { downloadSalarySlip } from '../utils/salarySlipPdf';
 
 interface Props {
   employee: EmployeeIdentity;
@@ -140,7 +141,36 @@ export default function EmployeeDashboard({ employee, onLogout }: Props) {
               <h1 className="page-title">My Payroll</h1>
               <p className="page-desc">Employee Code {employee.code} · {employee.entitySlug}</p>
             </div>
-            <MonthControl selectedMonth={selectedMonth} onChange={setSelectedMonth} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {data && !loading && (
+                <button
+                  className="pill-btn green"
+                  onClick={() => downloadSalarySlip({
+                    name: data.name,
+                    code: data.code,
+                    entitySlug: data.entitySlug,
+                    designation: data.designation,
+                    department: data.department,
+                    dateOfJoining: data.dateOfJoining,
+                    location: data.location,
+                    bankName: data.bankName,
+                    bankAccount: data.bankAccount,
+                    ifsc: data.ifsc,
+                    uan: data.uan,
+                    currency: data.currency,
+                    salary: data.salary,
+                    netPayable: data.netPayable,
+                    deductionRows,
+                    additionRows,
+                    totalDeductions,
+                    totalAdditions,
+                  }, selectedMonth)}
+                >
+                  Download Salary Slip
+                </button>
+              )}
+              <MonthControl selectedMonth={selectedMonth} onChange={setSelectedMonth} />
+            </div>
           </div>
 
           {loading && <p className="page-desc">Loading your payroll data…</p>}

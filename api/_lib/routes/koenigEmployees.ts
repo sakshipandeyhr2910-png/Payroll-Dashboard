@@ -3,7 +3,7 @@ import { requireAuth } from '../auth';
 import { kv } from '../kv';
 import { refreshCachedToken, withCachedToken } from '../tokenCache';
 import { fetchAllKoenigEmployees, fetchToken, type PmsCredentials, type PmsEmployeeRaw } from '../pmsClient';
-import { matchEmployeeCode, type SerializedCodeUniverse } from '../codeUniverseMatch';
+import { withMatchedCode, type SerializedCodeUniverse } from '../codeUniverseMatch';
 
 // Ported from vite-plugins/rayontaraApiPlugin.ts's '/api/koenig/employees' handler.
 //
@@ -60,7 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const withCodes: KoenigEmployeeWithCode[] = employees.map((e) => ({ ...e, code: matchEmployeeCode(e, universe) }));
+    const withCodes: KoenigEmployeeWithCode[] = employees.map((e) => withMatchedCode(e, universe));
     const matched = withCodes.filter((e) => e.code !== null).length;
     res.status(200).json({ ok: true, employees: withCodes, matched, total: withCodes.length });
   } catch (err) {
