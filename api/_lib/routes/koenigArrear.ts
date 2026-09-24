@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../auth';
-import { readJsonBody } from '../readBody';
-import { fetchArrearForCodesWithRetry, type ArrearCredentials } from '../arrearClient';
-import { safeVerifyKoenigDecryption } from '../koenigDecryption';
+import { requireAuth } from '../auth.js';
+import { readJsonBody } from '../readBody.js';
+import { fetchArrearForCodesWithRetry, type ArrearCredentials } from '../arrearClient.js';
+import { safeVerifyKoenigDecryption } from '../koenigDecryption.js';
 
 function credsFromEnv(): ArrearCredentials {
   return {

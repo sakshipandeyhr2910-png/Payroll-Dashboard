@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../auth';
-import { readJsonBody } from '../readBody';
-import { fetchLeaveForCodesWithRetry, type LeaveCredentials } from '../leaveClient';
+import { requireAuth } from '../auth.js';
+import { readJsonBody } from '../readBody.js';
+import { fetchLeaveForCodesWithRetry, type LeaveCredentials } from '../leaveClient.js';
 
 function credsFromEnv(): LeaveCredentials {
   return {

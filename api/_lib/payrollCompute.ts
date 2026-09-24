@@ -3,8 +3,8 @@
 // overseasEntityMapping.ts). Used by api/_lib/routes/employeePayroll.ts to compute a single
 // employee's own month-scoped Net Payable the same way EntityPage.tsx computes it for HR's bulk
 // view. Keep both copies in sync if the underlying business rules ever change.
-import type { LoanAdvanceRecord } from './loanClient';
-import type { ArrearRecord } from './arrearClient';
+import type { LoanAdvanceRecord } from './loanClient.js';
+import type { ArrearRecord } from './arrearClient.js';
 
 const PT_BY_LOCATION: Record<string, number> = {
   bangalore: 200,

@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomBytes } from 'crypto';
-import { readJsonBody } from '../readBody';
-import { resolveIdentifier } from '../employeeLookup';
-import { verifyOtp } from '../otpStore';
-import { signSessionToken } from '../auth';
-import type { PmsCredentials } from '../pmsClient';
+import { readJsonBody } from '../readBody.js';
+import { resolveIdentifier } from '../employeeLookup.js';
+import { verifyOtp } from '../otpStore.js';
+import { signSessionToken } from '../auth.js';
+import type { PmsCredentials } from '../pmsClient.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {

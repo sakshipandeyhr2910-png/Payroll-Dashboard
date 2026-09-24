@@ -1,4 +1,4 @@
-import { kv } from './kv';
+import { kv } from './kv.js';
 
 // Replaces each vite-plugins/rayontara*ApiPlugin.ts's own module-level `let cachedToken` — those
 // relied on the Vite dev/preview server being one long-lived process; a Vercel function has no

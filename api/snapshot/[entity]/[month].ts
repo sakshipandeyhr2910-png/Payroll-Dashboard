@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../../_lib/auth';
-import { kv } from '../../_lib/kv';
-import { readJsonBody } from '../../_lib/readBody';
+import { requireAuth } from '../../_lib/auth.js';
+import { kv } from '../../_lib/kv.js';
+import { readJsonBody } from '../../_lib/readBody.js';
 
 // Ported from vite-plugins/snapshotPlugin.ts. Storage moves from one JSON file per entity+month
 // under <project>/.snapshots/ (a Vercel function's filesystem is read-only outside /tmp, and /tmp

@@ -1,5 +1,5 @@
-import type { PmsEmployee, PmsEmployeeRaw } from './pmsClient';
-import { normalizeDoj, normalizeName } from './pmsClient';
+import type { PmsEmployee, PmsEmployeeRaw } from './pmsClient.js';
+import { normalizeDoj, normalizeName } from './pmsClient.js';
 
 // JSON-safe shape of the "code universe" written to KV by scripts/warmCodeUniverse.ts (keys
 // `codeUniverse:koenig` / `codeUniverse:global`) and read here by api/koenig/employees.ts and

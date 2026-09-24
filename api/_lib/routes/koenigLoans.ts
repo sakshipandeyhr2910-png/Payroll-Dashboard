@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../auth';
-import { readJsonBody } from '../readBody';
-import { fetchAdvancesForCodesWithRetry, type LoanCredentials } from '../loanClient';
+import { requireAuth } from '../auth.js';
+import { readJsonBody } from '../readBody.js';
+import { fetchAdvancesForCodesWithRetry, type LoanCredentials } from '../loanClient.js';
 
 function credsFromEnv(): LoanCredentials {
   return {

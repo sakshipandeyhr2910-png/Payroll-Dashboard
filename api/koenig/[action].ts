@@ -1,11 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import appraisal from '../_lib/routes/koenigAppraisal';
-import arrear from '../_lib/routes/koenigArrear';
-import employees from '../_lib/routes/koenigEmployees';
-import leave from '../_lib/routes/koenigLeave';
-import loans from '../_lib/routes/koenigLoans';
-import recovery from '../_lib/routes/koenigRecovery';
-import tds from '../_lib/routes/koenigTds';
+import appraisal from '../_lib/routes/koenigAppraisal.js';
+import arrear from '../_lib/routes/koenigArrear.js';
+import employees from '../_lib/routes/koenigEmployees.js';
+import leave from '../_lib/routes/koenigLeave.js';
+import loans from '../_lib/routes/koenigLoans.js';
+import recovery from '../_lib/routes/koenigRecovery.js';
+import tds from '../_lib/routes/koenigTds.js';
 
 // One serverless function fanning out to every /api/koenig/* route by its [action] path segment —
 // see api/auth/[action].ts for why (Vercel's Hobby plan 12-function cap).

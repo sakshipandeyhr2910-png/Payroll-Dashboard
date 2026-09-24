@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import payroll from '../_lib/routes/employeePayroll';
+import payroll from '../_lib/routes/employeePayroll.js';
 
 // One serverless function fanning out to every /api/employee/* route by its [action] path segment
 // — see api/auth/[action].ts for why (Vercel's Hobby plan 12-function cap). Every route under

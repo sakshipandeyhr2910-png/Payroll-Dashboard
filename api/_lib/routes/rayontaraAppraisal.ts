@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../auth';
-import { RAYONTARA_EMP_CODES } from '../rayontaraEmpCodes';
-import { fetchAppraisalPlainWithRetry, type AppraisalCredentials } from '../appraisalClient';
-import { safeVerifyKoenigDecryption } from '../koenigDecryption';
+import { requireAuth } from '../auth.js';
+import { RAYONTARA_EMP_CODES } from '../rayontaraEmpCodes.js';
+import { fetchAppraisalPlainWithRetry, type AppraisalCredentials } from '../appraisalClient.js';
+import { safeVerifyKoenigDecryption } from '../koenigDecryption.js';
 
 function credsFromEnv(): AppraisalCredentials {
   return {

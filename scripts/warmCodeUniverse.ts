@@ -18,7 +18,7 @@
 
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
-import { kv } from '../api/_lib/kv';
+import { kv } from '../api/_lib/kv.js';
 import {
   fetchEmployeeByCode,
   fetchToken,
@@ -27,8 +27,8 @@ import {
   type PmsCredentials,
   type PmsEmployee,
   type TokenState,
-} from '../api/_lib/pmsClient';
-import type { SerializedCodeUniverse } from '../api/_lib/codeUniverseMatch';
+} from '../api/_lib/pmsClient.js';
+import type { SerializedCodeUniverse } from '../api/_lib/codeUniverseMatch.js';
 
 // Minimal .env loader (no dependency added just for this) — only used when this script runs
 // locally; GitHub Actions passes env vars in directly, and dotenv-style files don't exist there.

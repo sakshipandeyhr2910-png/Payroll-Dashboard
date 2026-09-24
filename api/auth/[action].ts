@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import login from '../_lib/routes/authLogin';
-import logout from '../_lib/routes/authLogout';
+import login from '../_lib/routes/authLogin.js';
+import logout from '../_lib/routes/authLogout.js';
 
 // One serverless function fanning out to every /api/auth/* route by its [action] path segment,
 // instead of one function per route — Vercel's Hobby plan caps a deployment at 12 functions, and

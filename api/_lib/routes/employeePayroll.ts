@@ -1,12 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../auth';
-import { fetchToken, fetchEmployeeByCode, type PmsCredentials } from '../pmsClient';
-import { fetchAppraisalForCodesWithRetry, type AppraisalCredentials } from '../appraisalClient';
-import { fetchAdvancesForCodesWithRetry, type LoanCredentials } from '../loanClient';
-import { fetchArrearForCodesWithRetry, type ArrearCredentials, type ArrearRecord } from '../arrearClient';
-import { fetchRecoveryForCodesWithRetry, type RecoveryCredentials } from '../recoveryClient';
-import { fetchTdsForCodesWithRetry, type TdsCredentials } from '../tdsClient';
-import { fetchWfhReimbursementsWithRetry, type WfhCredentials } from '../wfhClient';
+import { requireAuth } from '../auth.js';
+import { fetchToken, fetchEmployeeByCode, type PmsCredentials } from '../pmsClient.js';
+import { fetchAppraisalForCodesWithRetry, type AppraisalCredentials } from '../appraisalClient.js';
+import { fetchAdvancesForCodesWithRetry, type LoanCredentials } from '../loanClient.js';
+import { fetchArrearForCodesWithRetry, type ArrearCredentials, type ArrearRecord } from '../arrearClient.js';
+import { fetchRecoveryForCodesWithRetry, type RecoveryCredentials } from '../recoveryClient.js';
+import { fetchTdsForCodesWithRetry, type TdsCredentials } from '../tdsClient.js';
+import { fetchWfhReimbursementsWithRetry, type WfhCredentials } from '../wfhClient.js';
 import {
   professionalTaxForLocation,
   weekdaysInMonth,
@@ -16,7 +16,7 @@ import {
   totalLoanDeductionForMonth,
   round2,
   toCalcNumber,
-} from '../payrollCompute';
+} from '../payrollCompute.js';
 
 // Answers "what is MY OWN payroll data for a given month", for the logged-in employee only.
 // requireAuth(req, 'employee') guarantees the caller holds a verified 'employee' session

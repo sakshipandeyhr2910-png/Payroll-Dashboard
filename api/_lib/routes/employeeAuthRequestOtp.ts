@@ -1,11 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomInt } from 'crypto';
-import { readJsonBody } from '../readBody';
-import { resolveIdentifier } from '../employeeLookup';
-import { checkAndBumpRateLimit, storeOtp } from '../otpStore';
-import { sendOtpEmail } from '../mailer';
-import type { PmsCredentials } from '../pmsClient';
-import type { SmtpCredentials } from '../mailer';
+import { readJsonBody } from '../readBody.js';
+import { resolveIdentifier } from '../employeeLookup.js';
+import { checkAndBumpRateLimit, storeOtp } from '../otpStore.js';
+import { sendOtpEmail } from '../mailer.js';
+import type { PmsCredentials } from '../pmsClient.js';
+import type { SmtpCredentials } from '../mailer.js';
 
 // Ported from vite-plugins/employeeAuthPlugin.ts's '/api/employee-auth/request-otp' handler — see
 // that file's header comment for the full identity-resolution/security reasoning (deliberately

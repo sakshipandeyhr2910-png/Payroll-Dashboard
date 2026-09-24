@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../auth';
-import { withCachedToken } from '../tokenCache';
+import { requireAuth } from '../auth.js';
+import { withCachedToken } from '../tokenCache.js';
 
 // Ported from vite-plugins/rayontaraMealApiPlugin.ts's '/api/rayontara/meal-allowances' handler.
 // No Koenig variant exists for this API — confirmed against src/utils/rayontaraMealApi.ts

@@ -1,4 +1,4 @@
-import { withCachedToken } from './tokenCache';
+import { withCachedToken } from './tokenCache.js';
 
 // Ported from vite-plugins/rayontaraWfhApiPlugin.ts (minus the Vite middleware wiring). CONFIRMED
 // LIVE on 2026-09-17 — the earlier "always empty" result wasn't a data-availability gap, it was

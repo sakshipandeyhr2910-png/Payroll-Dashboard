@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../auth';
-import { RAYONTARA_EMP_CODES } from '../rayontaraEmpCodes';
-import { fetchLeaveForCodesWithRetry, type LeaveCredentials } from '../leaveClient';
+import { requireAuth } from '../auth.js';
+import { RAYONTARA_EMP_CODES } from '../rayontaraEmpCodes.js';
+import { fetchLeaveForCodesWithRetry, type LeaveCredentials } from '../leaveClient.js';
 
 function credsFromEnv(): LeaveCredentials {
   return {

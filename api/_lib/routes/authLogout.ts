@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import jwt from 'jsonwebtoken';
-import { tokenFromRequest } from '../auth';
-import { kv } from '../kv';
+import { tokenFromRequest } from '../auth.js';
+import { kv } from '../kv.js';
 
 // Ported from vite-plugins/dashboardAuthPlugin.ts's '/api/auth/logout' handler. The old version
 // just deleted the token from the in-memory `validTokens` Set. A JWT can't be un-signed, so

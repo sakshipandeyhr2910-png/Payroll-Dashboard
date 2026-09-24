@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../auth';
-import { readJsonBody } from '../readBody';
-import { fetchRecoveryForCodesWithRetry, type RecoveryCredentials } from '../recoveryClient';
+import { requireAuth } from '../auth.js';
+import { readJsonBody } from '../readBody.js';
+import { fetchRecoveryForCodesWithRetry, type RecoveryCredentials } from '../recoveryClient.js';
 
 function credsFromEnv(): RecoveryCredentials {
   return {

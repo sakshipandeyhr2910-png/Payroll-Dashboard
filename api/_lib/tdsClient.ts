@@ -1,4 +1,4 @@
-import { withCachedToken } from './tokenCache';
+import { withCachedToken } from './tokenCache.js';
 
 // Ported from vite-plugins/rayontaraTdsApiPlugin.ts (minus the Vite middleware wiring).
 

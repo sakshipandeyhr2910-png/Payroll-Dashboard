@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../auth';
-import { RAYONTARA_EMP_CODES } from '../rayontaraEmpCodes';
-import { fetchAdvancesForCodesWithRetry, type LoanCredentials } from '../loanClient';
+import { requireAuth } from '../auth.js';
+import { RAYONTARA_EMP_CODES } from '../rayontaraEmpCodes.js';
+import { fetchAdvancesForCodesWithRetry, type LoanCredentials } from '../loanClient.js';
 
 function credsFromEnv(): LoanCredentials {
   return {

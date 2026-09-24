@@ -1,8 +1,8 @@
-import { fetchToken, fetchEmployeeByCode, toBool, type PmsCredentials, type PmsEmployee } from './pmsClient';
-import { classifyOverseasEmployee } from './overseasEntityMapping';
-import { RAYONTARA_EMP_CODES } from './rayontaraEmpCodes';
-import { kv } from './kv';
-import type { SerializedCodeUniverse } from './codeUniverseMatch';
+import { fetchToken, fetchEmployeeByCode, toBool, type PmsCredentials, type PmsEmployee } from './pmsClient.js';
+import { classifyOverseasEmployee } from './overseasEntityMapping.js';
+import { RAYONTARA_EMP_CODES } from './rayontaraEmpCodes.js';
+import { kv } from './kv.js';
+import type { SerializedCodeUniverse } from './codeUniverseMatch.js';
 
 // Employee Login identity model: "Employee ID" is the PMS Emp Code (the same number every other
 // integration in this app keys off), and "registered email" is the PMS record's own email_address

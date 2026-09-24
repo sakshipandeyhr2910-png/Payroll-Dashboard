@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import employees from '../_lib/routes/globalEmployees';
-import wfh from '../_lib/routes/globalWfh';
+import employees from '../_lib/routes/globalEmployees.js';
+import wfh from '../_lib/routes/globalWfh.js';
 
 // One serverless function fanning out to every /api/global/* route by its [action] path segment —
 // see api/auth/[action].ts for why (Vercel's Hobby plan 12-function cap).

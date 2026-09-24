@@ -1,5 +1,5 @@
-import { decryptKoenigValue } from './koenigDecryption';
-import { withCachedToken } from './tokenCache';
+import { decryptKoenigValue } from './koenigDecryption.js';
+import { withCachedToken } from './tokenCache.js';
 
 // Ported from vite-plugins/rayontaraAppraisalApiPlugin.ts (minus the Vite middleware wiring —
 // see api/rayontara/appraisal.ts and api/koenig/appraisal.ts for the route handlers that call

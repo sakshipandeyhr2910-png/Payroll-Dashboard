@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import requestOtp from '../_lib/routes/employeeAuthRequestOtp';
-import verifyOtp from '../_lib/routes/employeeAuthVerifyOtp';
+import requestOtp from '../_lib/routes/employeeAuthRequestOtp.js';
+import verifyOtp from '../_lib/routes/employeeAuthVerifyOtp.js';
 
 // One serverless function fanning out to every /api/employee-auth/* route by its [action] path
 // segment — see api/auth/[action].ts for why (Vercel's Hobby plan 12-function cap). Both routes

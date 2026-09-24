@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../auth';
-import { fetchWfhReimbursementsWithRetry, type WfhCredentials } from '../wfhClient';
+import { requireAuth } from '../auth.js';
+import { fetchWfhReimbursementsWithRetry, type WfhCredentials } from '../wfhClient.js';
 
 function credsFromEnv(): WfhCredentials {
   return {

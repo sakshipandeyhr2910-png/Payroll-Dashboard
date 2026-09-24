@@ -1,5 +1,5 @@
-import { kv } from './kv';
-import type { ResolvedEmployee } from './employeeLookup';
+import { kv } from './kv.js';
+import type { ResolvedEmployee } from './employeeLookup.js';
 
 // Production equivalent of vite-plugins/employeeAuthPlugin.ts's in-memory otpStore/rateLimits
 // Maps — same shape, backed by Turso so it survives across serverless invocations. Keyed by

@@ -1,6 +1,6 @@
 import type { VercelRequest } from '@vercel/node';
 import jwt from 'jsonwebtoken';
-import { kv } from './kv';
+import { kv } from './kv.js';
 
 // Replaces the old in-memory `Set<string>` session store (vite-plugins/dashboardAuthPlugin.ts) —
 // a serverless function has no memory shared across invocations, so sessions are now stateless
