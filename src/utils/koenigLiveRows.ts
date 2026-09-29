@@ -61,12 +61,12 @@ function toBool(v: string | null | undefined): boolean {
 //     AED — her Appraisal record alone said USD. Rate 3.6725 is the UAE's fixed currency-board
 //     peg to USD, so it won't drift and never needs revisiting.
 //   - 3287 (Imran Sheikh): confirmed to process in AED despite his Appraisal record saying EUR.
-//     Rate 4.20893 (as of 2026-09-17) is a FLOATING market rate, unlike the USD peg above — it
-//     WILL drift over time and should be refreshed from the same converter periodically, unlike
-//     the 3742 entry.
+//     Rate 4.17021 (as of 2026-09-29, refreshed from 4.20893 on 2026-09-17) is a FLOATING market
+//     rate, unlike the USD peg above — it WILL drift over time and should be refreshed from the
+//     same converter periodically, unlike the 3742 entry.
 const CURRENCY_CORRECTIONS: Record<number, { fromCurrency: string; toCurrency: string; rate: number }> = {
   3742: { fromCurrency: 'USD', toCurrency: 'AED', rate: 3.6725 },
-  3287: { fromCurrency: 'EUR', toCurrency: 'AED', rate: 4.20893 },
+  3287: { fromCurrency: 'EUR', toCurrency: 'AED', rate: 4.17021 },
 };
 
 function correctedAppraisalAmount(code: number | null, amount: number | null, currency: string | null): number | null {
