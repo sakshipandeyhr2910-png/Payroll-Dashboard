@@ -1362,46 +1362,54 @@ export default function EntityPage({
   // (server-enforced first-write-wins, no way to un-freeze except deleting the file) — every time a
   // new live column was added, the very first person to view a given month would freeze it before
   // that column ever had a chance to load. This checks every sub-fetch relevant to the currently
-  // active live entity has actually settled (resolved OR errored — either way, no longer pending)
-  // before the freeze is allowed to fire at all.
+  // active live entity has actually resolved SUCCESSFULLY before the freeze is allowed to fire.
+  //
+  // Deliberately NOT "resolved OR errored" (an earlier version of this check used that, and it's
+  // what let a real incomplete freeze through: a dev-server restart invalidated the session
+  // mid-fetch, koenigTds/koenigRecovery came back as 401 errors, and the OR-with-error check
+  // treated that as "settled" — freezing Koenig's September 2026 snapshot with TDS/Recovery/VPF/
+  // TA-DA all silently zeroed out, permanently, since snapshots are immutable). Requiring true
+  // success means a transient failure just delays the freeze to the next successful visit (or the
+  // next automated capture run — see scripts/capturePayrollSnapshots.ts, which is already
+  // idempotent/safe to retry) instead of permanently baking in wrong zeros.
   const liveDataSettled = entity.slug === 'rayontara'
     ? (!liveLoading
-        && (liveRecovery !== null || recoveryError !== null)
-        && (liveTds !== null || tdsError !== null)
-        && (liveLeave !== null || leaveError !== null))
+        && liveRecovery !== null
+        && liveTds !== null
+        && liveLeave !== null)
     : entity.slug === 'koenig'
-      ? ((koenigEmployees !== null || koenigError !== null)
-        && (koenigAppraisal !== null || koenigAppraisalError !== null)
-        && (koenigLoans !== null || koenigLoanError !== null)
-        && (koenigMeals !== null || koenigMealError !== null)
-        && (koenigRecovery !== null || koenigRecoveryError !== null)
-        && (koenigTds !== null || koenigTdsError !== null)
-        && (koenigLeave !== null || koenigLeaveError !== null)
-        && (koenigArrear !== null || koenigArrearError !== null))
+      ? (koenigEmployees !== null
+        && koenigAppraisal !== null
+        && koenigLoans !== null
+        && koenigMeals !== null
+        && koenigRecovery !== null
+        && koenigTds !== null
+        && koenigLeave !== null
+        && koenigArrear !== null)
       : entity.slug === 'global'
-        ? ((globalEmployees !== null || globalError !== null)
-          && (globalAppraisal !== null || globalAppraisalError !== null)
-          && (globalLoans !== null || globalLoanError !== null)
-          && (globalMeals !== null || globalMealError !== null)
-          && (globalRecovery !== null || globalRecoveryError !== null)
-          && (globalTds !== null || globalTdsError !== null)
-          && (globalLeave !== null || globalLeaveError !== null)
-          && (globalWfh !== null || globalWfhError !== null)
-          && (globalArrear !== null || globalArrearError !== null))
+        ? (globalEmployees !== null
+          && globalAppraisal !== null
+          && globalLoans !== null
+          && globalMeals !== null
+          && globalRecovery !== null
+          && globalTds !== null
+          && globalLeave !== null
+          && globalWfh !== null
+          && globalArrear !== null)
         : isOverseasEntity
-          ? ((overseasEmployees !== null || overseasError !== null)
-            && (overseasAppraisal !== null || overseasAppraisalError !== null)
-            && (overseasLoans !== null || overseasLoanError !== null)
-            && (overseasArrear !== null || overseasArrearError !== null)
-            && (overseasRecovery !== null || overseasRecoveryError !== null)
+          ? (overseasEmployees !== null
+            && overseasAppraisal !== null
+            && overseasLoans !== null
+            && overseasArrear !== null
+            && overseasRecovery !== null
             // Dubai also pulls Global's data for EMPLOYEE_ENTITY_OVERRIDE (Imran Sheikh, 3287) —
             // must settle too, or Dubai could freeze his row before Pay Scale/Loan/Arrear load.
             && (entity.slug !== 'dubai'
-              || ((globalEmployees !== null || globalError !== null)
-                && (globalAppraisal !== null || globalAppraisalError !== null)
-                && (globalLoans !== null || globalLoanError !== null)
-                && (globalArrear !== null || globalArrearError !== null)
-                && (globalRecovery !== null || globalRecoveryError !== null))))
+              || (globalEmployees !== null
+                && globalAppraisal !== null
+                && globalLoans !== null
+                && globalArrear !== null
+                && globalRecovery !== null)))
           : true; // sample entities never take this path — entityIsLiveNow is false for them
 
   useEffect(() => {
