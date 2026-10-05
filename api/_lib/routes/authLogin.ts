@@ -20,8 +20,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Trimmed on both sides: a trailing space/newline pasted into Vercel's env var UI is invisible
+  // there but makes an otherwise-correct password never match.
+  const expectedUsername = process.env.DASHBOARD_USERNAME?.trim();
+  const expectedPassword = process.env.DASHBOARD_PASSWORD?.trim();
+  if (!expectedUsername || !expectedPassword) {
+    console.error('[auth/login] DASHBOARD_USERNAME / DASHBOARD_PASSWORD is not set');
+    res.status(500).json({
+      ok: false,
+      error: 'Server misconfigured: DASHBOARD_USERNAME / DASHBOARD_PASSWORD are not set in this environment',
+    });
+    return;
+  }
+
   const { username, password } = parsed;
-  if (username !== process.env.DASHBOARD_USERNAME || password !== process.env.DASHBOARD_PASSWORD) {
+  if (username?.trim() !== expectedUsername || password?.trim() !== expectedPassword) {
     res.status(401).json({ ok: false, error: 'Invalid username or password' });
     return;
   }
