@@ -82,7 +82,15 @@ export async function requireAuth(req: VercelRequest, requiredRole: SessionClaim
     // dashboard shows bank/UAN/salary data, so an availability blip on the KV side should not
     // silently widen into "everyone stays logged in no matter what".
     console.error('[auth] KV lookup for revocation check failed', err);
-    return UNAUTHORIZED;
+    // 503, not 401: the client signs the user out on any 401, so reporting a backend outage as
+    // "not authenticated" made a perfectly valid session bounce back to the login screen in a
+    // loop (seen live when TURSO_* env vars were missing on a Vercel project).
+    const detail = err instanceof Error ? err.message : 'unknown error';
+    return {
+      ok: false,
+      status: 503,
+      body: { ok: false, error: `Session store unavailable (${detail}). Check TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in this deployment's environment variables.` },
+    };
   }
 
   if (claims.session.role !== requiredRole) return FORBIDDEN;
