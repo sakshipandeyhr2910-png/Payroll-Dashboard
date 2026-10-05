@@ -24,11 +24,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // there but makes an otherwise-correct password never match.
   const expectedUsername = process.env.DASHBOARD_USERNAME?.trim();
   const expectedPassword = process.env.DASHBOARD_PASSWORD?.trim();
-  if (!expectedUsername || !expectedPassword) {
-    console.error('[auth/login] DASHBOARD_USERNAME / DASHBOARD_PASSWORD is not set');
+  const missing = [
+    !expectedUsername && 'DASHBOARD_USERNAME',
+    !expectedPassword && 'DASHBOARD_PASSWORD',
+  ].filter(Boolean);
+  if (missing.length > 0) {
+    console.error(`[auth/login] empty or unset: ${missing.join(', ')}`);
     res.status(500).json({
       ok: false,
-      error: 'Server misconfigured: DASHBOARD_USERNAME / DASHBOARD_PASSWORD are not set in this environment',
+      error: `Server misconfigured: ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} empty or not set in this deployment`,
     });
     return;
   }
