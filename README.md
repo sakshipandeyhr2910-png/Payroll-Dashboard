@@ -283,3 +283,29 @@ automatically every month regardless of whether a human does.
    month rolls over does the real freeze, every run after that for the same month confirms it's
    already frozen and does nothing (safe to also trigger manually via **Actions** →
    **Capture monthly payroll snapshots** → **Run workflow**).
+
+## Workflows
+
+Every automated and recurring process in this project, by name.
+
+### GitHub Actions workflows (`.github/workflows/`)
+
+| Workflow name | File | Schedule | What it does |
+|---|---|---|---|
+| **Warm Koenig/Global employee code cache** | `warm-koenig-cache.yml` | Daily 03:00 UTC, or manual | Runs `npm run warm-code-universe` (`scripts/warmCodeUniverse.ts`): scans PMS codes 1–10,100 and stores the code-to-employee matches in Turso (`codeUniverse:koenig/global/overseas`). The Koenig, Global and Overseas pages return a 503 until this has run once. Needs the `PMS_*` and `TURSO_*` repo secrets. |
+| **Capture monthly payroll snapshots** | `capture-payroll-snapshots.yml` | Daily 00:05 IST (18:35 UTC), or manual | Runs `npm run capture-payroll-snapshots` (`scripts/capturePayrollSnapshots.ts`): signs in as HR and visits all 11 entity pages for the month that just ended, so the month-end freeze happens with no one logged in. Safe to repeat: months already saved are left alone. Needs `DASHBOARD_URL`, `DASHBOARD_USERNAME`, `DASHBOARD_PASSWORD`. |
+
+### Deployment workflow
+
+- **Vercel auto-deploy:** every push to `main` builds and deploys the `payroll-dashboard` project to production. Environment variables only apply to deployments created after they are saved, so redeploy after changing them.
+
+### Application workflows
+
+- **HR Admin login:** `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` produce a signed session (12h) with full access.
+- **Employee login:** Employee Code or Email, then a one-time code sent by email (`SMTP_*`), then the employee sees only their own payroll.
+- **Monthly payroll register:** live PMS data per entity (Koenig, Rayontara, Dubai, Global, USA, UK, New Zealand, Australia, Malaysia, Saudi, Canada) with TDS, Recovery, TA/DA, VPF, Loan, Leave, Arrear and WFH layered in per month.
+- **Month-end freeze:** once a month has ended, its register is saved as an immutable snapshot (first save wins). A save only happens when every data source loaded successfully.
+- **Update Employee List:** re-pulls everything and deliberately overwrites an already-saved month with fresh data. This is the way to correct a bad snapshot.
+- **Payroll card:** per entity and month, shows the saved snapshot with a Download (Excel) button; a month still in progress shows "still in progress".
+- **Export to Excel:** downloads the register currently on screen.
+- **Salary slip:** employees download a one-page PDF payslip for the month they are viewing.
