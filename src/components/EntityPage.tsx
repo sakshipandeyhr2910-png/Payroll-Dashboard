@@ -1479,7 +1479,10 @@ export default function EntityPage({
   useEffect(() => {
     if (!forceSnapshotOverwrite.current) return;
     if (!entityIsLiveNow || !monthIsCompleted || snapshotStatus !== 'frozen') return;
-    if (liveComputedRows.length === 0 || !nothingLoadingForForceOverwrite) return;
+    // liveDataSettled (success on every sub-fetch) is required too, not just "nothing loading":
+    // a sub-fetch that errored also stops loading, and overwriting an archived month with the
+    // zeros a failed TDS/Recovery fetch leaves behind is exactly how a bad snapshot gets made.
+    if (liveComputedRows.length === 0 || !nothingLoadingForForceOverwrite || !liveDataSettled) return;
     forceSnapshotOverwrite.current = false;
     saveSnapshot(entity.slug, selectedMonth, liveComputedRows, true).then((result) => {
       if (result.ok) {
@@ -1488,7 +1491,7 @@ export default function EntityPage({
         snapshotSaveAttempted.current = snapshotKey;
       }
     });
-  }, [entityIsLiveNow, monthIsCompleted, snapshotStatus, snapshotKey, entity.slug, selectedMonth, liveComputedRows, nothingLoadingForForceOverwrite]);
+  }, [entityIsLiveNow, monthIsCompleted, snapshotStatus, snapshotKey, entity.slug, selectedMonth, liveComputedRows, nothingLoadingForForceOverwrite, liveDataSettled]);
 
   // The single binding every line below actually reads: frozen data wins for a completed month
   // once one exists; live-computed data otherwise (current month always, or a completed month's
