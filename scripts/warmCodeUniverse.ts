@@ -151,8 +151,8 @@ async function main() {
     role: requireEnv('PMS_ROLE'),
     apiKey: requireEnv('PMS_API_KEY'),
   };
-  requireEnv('KV_REST_API_URL');
-  requireEnv('KV_REST_API_TOKEN');
+  requireEnv('TURSO_DATABASE_URL');
+  requireEnv('TURSO_AUTH_TOKEN');
 
   console.log('Fetching PMS token...');
   let token = await fetchToken(creds);
